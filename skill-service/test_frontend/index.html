@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>skillSNS - Skill Service 테스트</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f5f5f5; padding: 24px 16px; }
+    .layout { display: flex; gap: 20px; max-width: 1100px; margin: 0 auto; }
+    .sidebar { width: 300px; flex-shrink: 0; }
+    .main { flex: 1; min-width: 0; }
+    .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 16px; }
+    h1 { font-size: 18px; margin-bottom: 16px; color: #111; }
+    h2 { font-size: 13px; color: #666; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .btn { display: inline-block; padding: 8px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .btn-primary { background: #111; color: #fff; }
+    .btn-danger { background: #e53e3e; color: #fff; }
+    .btn-outline { background: #fff; border: 1px solid #ddd; color: #333; }
+    .btn:hover { opacity: 0.85; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .tag { display: inline-block; border-radius: 4px; padding: 2px 8px; font-size: 12px; }
+    .tag-ok { background: #c6f6d5; color: #276749; }
+    .tag-err { background: #fed7d7; color: #9b2c2c; }
+    input, textarea { width: 100%; border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+    textarea { resize: vertical; }
+    label { display: block; font-size: 12px; color: #555; margin-bottom: 4px; margin-top: 10px; }
+    label:first-child { margin-top: 0; }
+    .skill-item { padding: 10px 12px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+    .skill-item:hover { background: #f9f9f9; border-color: #ddd; }
+    .skill-item.active { border-color: #111; background: #f5f5f5; }
+    .skill-title { font-weight: 600; font-size: 14px; }
+    .skill-desc { font-size: 12px; color: #888; margin-top: 2px; }
+    .md-preview { border: 1px solid #eee; border-radius: 8px; padding: 16px; min-height: 80px; font-size: 14px; line-height: 1.7; overflow-x: auto; }
+    .md-preview h1, .md-preview h2, .md-preview h3 { margin: 12px 0 6px; }
+    .md-preview p { margin-bottom: 8px; }
+    .md-preview code { background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-size: 12px; }
+    .md-preview pre { background: #f0f0f0; padding: 12px; border-radius: 6px; overflow-x: auto; }
+    .md-preview ul, .md-preview ol { padding-left: 20px; margin-bottom: 8px; }
+    .chat-messages { min-height: 120px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+    .msg { margin-bottom: 10px; }
+    .msg-user { text-align: right; }
+    .msg-bubble { display: inline-block; padding: 8px 12px; border-radius: 10px; font-size: 13px; max-width: 80%; text-align: left; line-height: 1.5; }
+    .msg-user .msg-bubble { background: #111; color: #fff; }
+    .msg-assistant .msg-bubble { background: #f0f0f0; color: #111; }
+    .chat-input-row { display: flex; gap: 8px; }
+    .chat-input-row input { flex: 1; }
+    .empty { color: #aaa; font-size: 13px; text-align: center; padding: 20px 0; }
+    .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+    .log-box { background: #f9f9f9; border: 1px solid #eee; border-radius: 6px; padding: 10px; font-size: 12px; white-space: pre-wrap; min-height: 40px; color: #555; }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- 사이드바 -->
+  <div class="sidebar">
+    <div class="card">
+      <h2>로그인 상태</h2>
+      <div id="auth-status"><span class="tag tag-err">비로그인</span></div>
+      <div id="login-guide" style="margin-top:8px;font-size:12px;color:#aaa;display:none">
+        user-service에서 로그인 후<br>"Skill Service로 이동" 버튼을 눌러주세요.
+      </div>
+      <button id="logout-btn" class="btn btn-outline btn-sm" style="margin-top:8px;width:100%;display:none" onclick="clearToken()">토큰 제거</button>
+    </div>
+
+    <div class="card">
+      <h2>스킬 목록</h2>
+      <div id="skill-list"><div class="empty">스킬 없음</div></div>
+      <button class="btn btn-outline btn-sm" style="margin-top:10px;width:100%" onclick="loadSkills()">새로고침</button>
+    </div>
+
+    <div class="card">
+      <h2>스킬 등록</h2>
+      <label>제목</label>
+      <input id="skill-title" placeholder="Python 전문가" />
+      <label>설명</label>
+      <input id="skill-desc" placeholder="간단한 설명" />
+      <label>MD 내용</label>
+      <textarea id="skill-md" rows="6" placeholder="# 전문가 프로필&#10;&#10;## 전문 분야&#10;..."></textarea>
+      <button class="btn btn-primary" style="margin-top:10px;width:100%" onclick="createSkill()">등록</button>
+      <div id="create-log" class="log-box" style="margin-top:8px;display:none"></div>
+    </div>
+  </div>
+
+  <!-- 메인 -->
+  <div class="main">
+    <div id="skill-detail" class="card" style="display:none">
+      <!-- 보기 모드 -->
+      <div id="view-mode">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div>
+            <h1 id="detail-title"></h1>
+            <div id="detail-desc" style="font-size:13px;color:#888"></div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-outline btn-sm" onclick="downloadSkill()">다운로드</button>
+            <button class="btn btn-outline btn-sm" id="edit-btn" style="display:none" onclick="enterEditMode()">수정</button>
+            <button class="btn btn-danger btn-sm" id="delete-btn" style="display:none" onclick="deleteSkill()">삭제</button>
+          </div>
+        </div>
+        <h2>MD 미리보기</h2>
+        <div id="md-preview" class="md-preview"></div>
+      </div>
+
+      <!-- 수정 모드 -->
+      <div id="edit-mode" style="display:none">
+        <h1 style="margin-bottom:12px">스킬 수정</h1>
+        <label>제목</label>
+        <input id="edit-title" />
+        <label>설명</label>
+        <input id="edit-desc" />
+        <label>MD 내용</label>
+        <textarea id="edit-md" rows="10"></textarea>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-primary" onclick="saveSkill()">저장</button>
+          <button class="btn btn-outline" onclick="exitEditMode()">취소</button>
+        </div>
+        <div id="edit-log" class="log-box" style="margin-top:8px;display:none"></div>
+      </div>
+    </div>
+
+    <div id="chat-card" class="card" style="display:none">
+      <h2>에이전트 대화</h2>
+      <div id="chat-messages" class="chat-messages"><div class="empty">대화를 시작하세요.</div></div>
+      <div class="chat-input-row">
+        <input id="chat-input" placeholder="메시지를 입력하세요..." onkeydown="if(event.key==='Enter')sendMessage()" />
+        <button class="btn btn-primary" onclick="sendMessage()">전송</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const API = 'http://localhost:8002';
+  let currentSkill = null;
+  let currentSessionId = null;
+
+  function getToken() {
+    return localStorage.getItem('access_token');
+  }
+
+  function getUserId() {
+    const token = getToken();
+    if (!token) return null;
+    try {
+      return JSON.parse(atob(token.split('.')[1])).sub;
+    } catch {
+      return null;
+    }
+  }
+
+  function renderAuth() {
+    const token = getToken();
+    const el = document.getElementById('auth-status');
+    const guide = document.getElementById('login-guide');
+    const logoutBtn = document.getElementById('logout-btn');
+    if (token) {
+      el.innerHTML = `<span class="tag tag-ok">로그인됨</span>`;
+      guide.style.display = 'none';
+      logoutBtn.style.display = 'block';
+    } else {
+      el.innerHTML = `<span class="tag tag-err">비로그인</span>`;
+      guide.style.display = 'block';
+      logoutBtn.style.display = 'none';
+    }
+  }
+
+  function clearToken() {
+    localStorage.removeItem('access_token');
+    renderAuth();
+  }
+
+  // user-service 리다이렉트로 전달된 토큰 처리
+  (function applyTokenFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      localStorage.setItem('access_token', token);
+      window.history.replaceState({}, '', '/');
+    }
+  })();
+
+  async function loadSkills() {
+    const res = await fetch(`${API}/skills`);
+    const skills = await res.json();
+    const el = document.getElementById('skill-list');
+    if (!skills.length) {
+      el.innerHTML = '<div class="empty">스킬 없음</div>';
+      return;
+    }
+    el.innerHTML = skills.map(s => `
+      <div class="skill-item" id="skill-item-${s.id}">
+        <div onclick="selectSkill('${s.id}')" style="cursor:pointer">
+          <div class="skill-title">${s.title}</div>
+          <div class="skill-desc">${s.description || ''}</div>
+        </div>
+        <div style="margin-top:6px">
+          <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();downloadSkillById('${s.id}','${s.title}')">⬇ .md 다운로드</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function selectSkill(skillId) {
+    document.querySelectorAll('.skill-item').forEach(el => el.classList.remove('active'));
+    const item = document.getElementById(`skill-item-${skillId}`);
+    if (item) item.classList.add('active');
+
+    const res = await fetch(`${API}/skills/${skillId}`);
+    const skill = await res.json();
+    currentSkill = skill;
+    currentSessionId = null;
+
+    document.getElementById('detail-title').textContent = skill.title;
+    document.getElementById('detail-desc').textContent = skill.description || '';
+    document.getElementById('md-preview').innerHTML = marked.parse(skill.md_content || '');
+    document.getElementById('skill-detail').style.display = 'block';
+    document.getElementById('chat-card').style.display = 'block';
+
+    const myId = getUserId();
+    const isOwner = myId && myId === skill.user_id;
+    document.getElementById('delete-btn').style.display = isOwner ? 'inline-block' : 'none';
+    document.getElementById('edit-btn').style.display = isOwner ? 'inline-block' : 'none';
+
+    document.getElementById('chat-messages').innerHTML = '<div class="empty">대화를 시작하세요.</div>';
+  }
+
+  async function createSkill() {
+    const token = getToken();
+    if (!token) {
+      showCreateLog('로그인이 필요합니다.');
+      return;
+    }
+    const title = document.getElementById('skill-title').value.trim();
+    const desc = document.getElementById('skill-desc').value.trim();
+    const md = document.getElementById('skill-md').value.trim();
+    if (!title || !md) {
+      showCreateLog('제목과 MD 내용은 필수입니다.');
+      return;
+    }
+    const res = await fetch(`${API}/skills`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ title, description: desc, md_content: md }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showCreateLog('등록 완료!');
+      document.getElementById('skill-title').value = '';
+      document.getElementById('skill-desc').value = '';
+      document.getElementById('skill-md').value = '';
+      await loadSkills();
+    } else {
+      showCreateLog(`오류: ${JSON.stringify(data)}`);
+    }
+  }
+
+  function showCreateLog(msg) {
+    const el = document.getElementById('create-log');
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+
+  function downloadSkill() {
+    if (!currentSkill) return;
+    downloadSkillById(currentSkill.id, currentSkill.title);
+  }
+
+  function downloadSkillById(id, title) {
+    const a = document.createElement('a');
+    a.href = `${API}/skills/${id}/download`;
+    a.download = title.replace(/ /g, '_') + '.md';
+    a.click();
+  }
+
+  function enterEditMode() {
+    document.getElementById('view-mode').style.display = 'none';
+    document.getElementById('edit-mode').style.display = 'block';
+    document.getElementById('edit-title').value = currentSkill.title;
+    document.getElementById('edit-desc').value = currentSkill.description || '';
+    document.getElementById('edit-md').value = currentSkill.md_content;
+    document.getElementById('edit-log').style.display = 'none';
+  }
+
+  function exitEditMode() {
+    document.getElementById('edit-mode').style.display = 'none';
+    document.getElementById('view-mode').style.display = 'block';
+  }
+
+  async function saveSkill() {
+    const token = getToken();
+    if (!token || !currentSkill) return;
+
+    const title = document.getElementById('edit-title').value.trim();
+    const description = document.getElementById('edit-desc').value.trim();
+    const md_content = document.getElementById('edit-md').value.trim();
+
+    if (!title || !md_content) {
+      showEditLog('제목과 MD 내용은 필수입니다.');
+      return;
+    }
+
+    const res = await fetch(`${API}/skills/${currentSkill.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ title, description: description || null, md_content }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      currentSkill = data;
+      document.getElementById('detail-title').textContent = data.title;
+      document.getElementById('detail-desc').textContent = data.description || '';
+      document.getElementById('md-preview').innerHTML = marked.parse(data.md_content || '');
+      exitEditMode();
+      await loadSkills();
+    } else {
+      showEditLog(`오류: ${JSON.stringify(data)}`);
+    }
+  }
+
+  function showEditLog(msg) {
+    const el = document.getElementById('edit-log');
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+
+  async function deleteSkill() {
+    if (!currentSkill) return;
+    const token = getToken();
+    if (!confirm(`"${currentSkill.title}" 스킬을 삭제하시겠습니까?`)) return;
+    const res = await fetch(`${API}/skills/${currentSkill.id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (res.ok) {
+      currentSkill = null;
+      document.getElementById('skill-detail').style.display = 'none';
+      document.getElementById('chat-card').style.display = 'none';
+      await loadSkills();
+    }
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (!message || !currentSkill) return;
+    input.value = '';
+
+    appendMessage('user', message);
+
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let url, method = 'POST';
+    if (currentSessionId) {
+      url = `${API}/chat/${currentSkill.id}/${currentSessionId}`;
+    } else {
+      url = `${API}/chat/${currentSkill.id}`;
+    }
+
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: JSON.stringify({ message }),
+    });
+    const data = await res.json();
+
+    if (data.session_id && !currentSessionId) {
+      currentSessionId = data.session_id;
+    }
+
+    appendMessage('assistant', data.reply);
+  }
+
+  function appendMessage(role, content) {
+    const container = document.getElementById('chat-messages');
+    const empty = container.querySelector('.empty');
+    if (empty) empty.remove();
+
+    const div = document.createElement('div');
+    div.className = `msg msg-${role}`;
+    div.innerHTML = `<span class="msg-bubble">${escapeHtml(content)}</span>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  }
+
+  renderAuth();
+  loadSkills();
+</script>
+</body>
+</html>

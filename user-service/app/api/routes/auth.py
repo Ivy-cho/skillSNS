@@ -24,7 +24,7 @@ bearer_scheme = HTTPBearer()
 
 SUPPORTED_PROVIDERS = {"google", "kakao", "naver"}
 
-supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
 
 
 @router.get("/login/{provider}", response_model=LoginUrlResponse)

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>skillSNS 로그인 테스트</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f5f5f5; display: flex; justify-content: center; padding: 40px 16px; }
+    .card { background: white; border-radius: 12px; padding: 32px; width: 100%; max-width: 480px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+    h1 { font-size: 20px; margin-bottom: 24px; color: #111; }
+    h2 { font-size: 14px; color: #666; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .section { margin-bottom: 28px; }
+    .btn { display: block; width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 10px; }
+    .btn-google { background: #fff; border: 1px solid #ddd; color: #333; }
+    .btn-kakao  { background: #FEE500; color: #000; }
+    .btn-naver  { background: #03C75A; color: #fff; }
+    .btn-action { background: #111; color: #fff; }
+    .btn-danger { background: #e53e3e; color: #fff; }
+    .btn:hover { opacity: 0.85; }
+    .info-box { background: #f9f9f9; border: 1px solid #eee; border-radius: 8px; padding: 14px; font-size: 13px; word-break: break-all; line-height: 1.6; min-height: 60px; }
+    .tag { display: inline-block; background: #eee; border-radius: 4px; padding: 2px 8px; font-size: 12px; margin-bottom: 8px; }
+    .tag.ok { background: #c6f6d5; color: #276749; }
+    .tag.err { background: #fed7d7; color: #9b2c2c; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>skillSNS 로그인 테스트</h1>
+
+  <div class="section">
+    <h2>소셜 로그인</h2>
+    <button class="btn btn-google" onclick="login('google')">Google 로그인</button>
+    <button class="btn btn-kakao"  onclick="login('kakao')">Kakao 로그인</button>
+    <button class="btn btn-naver"  onclick="login('naver')">Naver 로그인</button>
+  </div>
+
+  <div class="section">
+    <h2>현재 상태</h2>
+    <div id="status-box" class="info-box">로그인 전입니다.</div>
+  </div>
+
+  <div class="section">
+    <h2>토큰</h2>
+    <div id="token-box" class="info-box">-</div>
+  </div>
+
+  <div class="section">
+    <button class="btn btn-action" onclick="refreshToken()">Access Token 갱신</button>
+    <button class="btn btn-danger" onclick="logout()">로그아웃</button>
+    <button class="btn btn-action" style="background:#2b6cb0;margin-top:8px" onclick="goToSkillService()">Skill Service로 이동</button>
+  </div>
+
+  <div class="section">
+    <h2>응답 로그</h2>
+    <div id="log-box" class="info-box" style="min-height:100px; white-space:pre-wrap;">-</div>
+  </div>
+</div>
+
+<script>
+  const API = 'http://localhost:8001';
+
+  function log(text) {
+    document.getElementById('log-box').textContent = typeof text === 'object'
+      ? JSON.stringify(text, null, 2) : text;
+  }
+
+  function saveTokens(data) {
+    localStorage.setItem('access_token', data.access_token);
+    localStorage.setItem('refresh_token', data.refresh_token);
+    localStorage.setItem('user_info', JSON.stringify(data.user));
+    renderState(data);
+  }
+
+  function renderState(data) {
+    const u = data.user;
+    document.getElementById('status-box').innerHTML =
+      `<span class="tag ok">로그인됨</span><br>` +
+      `이메일: ${u.email}<br>닉네임: ${u.nickname}<br>provider: ${u.provider}`;
+    document.getElementById('token-box').textContent =
+      `access_token:\n${data.access_token}\n\nrefresh_token:\n${data.refresh_token}`;
+  }
+
+  async function login(provider) {
+    log(`${provider} 로그인 URL 요청 중...`);
+    try {
+      const res = await fetch(`${API}/auth/login/${provider}`);
+      const data = await res.json();
+      log(data);
+      if (data.login_url) window.location.href = data.login_url;
+    } catch (e) { log('오류: ' + e.message); }
+  }
+
+  async function refreshToken() {
+    const refresh_token = localStorage.getItem('refresh_token');
+    if (!refresh_token) { log('저장된 refresh_token이 없습니다.'); return; }
+    try {
+      const res = await fetch(`${API}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token }),
+      });
+      const data = await res.json();
+      log(data);
+      if (data.access_token) {
+        localStorage.setItem('access_token', data.access_token);
+        document.getElementById('token-box').textContent =
+          `access_token:\n${data.access_token}\n\nrefresh_token:\n${refresh_token}`;
+      }
+    } catch (e) { log('오류: ' + e.message); }
+  }
+
+  function goToSkillService() {
+    const token = localStorage.getItem('access_token');
+    if (!token) { log('먼저 로그인하세요.'); return; }
+    window.location.href = `http://localhost:8002/?token=${encodeURIComponent(token)}`;
+  }
+
+  async function logout() {
+    const access_token = localStorage.getItem('access_token');
+    if (!access_token) { log('저장된 access_token이 없습니다.'); return; }
+    try {
+      const res = await fetch(`${API}/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+      const data = await res.json();
+      log(data);
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user_info');
+      document.getElementById('status-box').textContent = '로그인 전입니다.';
+      document.getElementById('token-box').textContent = '-';
+    } catch (e) { log('오류: ' + e.message); }
+  }
+
+  // 페이지 로드 시 로그인 상태 복원
+  function restoreLoginState() {
+    const userInfo = localStorage.getItem('user_info');
+    const accessToken = localStorage.getItem('access_token');
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (userInfo && accessToken) {
+      renderState({
+        user: JSON.parse(userInfo),
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+    }
+  }
+
+  // 콜백으로 돌아왔을 때 토큰 자동 처리
+  (async () => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) {
+      restoreLoginState();
+      return;
+    }
+    if (code) {
+      log('콜백 코드 수신, 토큰 교환 중...');
+      try {
+        const res = await fetch(`${API}/auth/callback?code=${code}`);
+        const data = await res.json();
+        log(data);
+        if (data.access_token) {
+          saveTokens(data);
+          window.history.replaceState({}, '', '/');
+        }
+      } catch (e) { log('오류: ' + e.message); }
+    }
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+services:
+  user-service:
+    build: ./user-service
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./user-service/.env
+    networks:
+      - skillsns-network
+
+  skill-service:
+    build: ./skill-service
+    ports:
+      - "8002:8002"
+    env_file:
+      - ./skill-service/.env
+    networks:
+      - skillsns-network
+
+networks:
+  skillsns-network:
+    driver: bridge

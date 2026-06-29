@@ -54,9 +54,18 @@ async def auth_callback(code: str, db: AsyncSession = Depends(get_db)):
     provider = supabase_user.app_metadata.get("provider", "unknown")
     provider_id = supabase_user.id
     email = supabase_user.email
-    nickname = (supabase_user.user_metadata.get("full_name") or
-                supabase_user.user_metadata.get("name") or
-                email.split("@")[0])
+
+    # 카카오 전화번호 전용 계정은 email이 없을 수 있으므로 placeholder 생성
+    if not email:
+        email = f"{provider_id}@{provider}.skillsns"
+
+    # 제공자별 닉네임 필드: Google=full_name, Kakao=name/preferred_username
+    nickname = (
+        supabase_user.user_metadata.get("full_name") or
+        supabase_user.user_metadata.get("name") or
+        supabase_user.user_metadata.get("preferred_username") or
+        email.split("@")[0]
+    )
 
     result = await db.execute(select(User).where(User.email == email, User.provider == provider))
     user = result.scalar_one_or_none()

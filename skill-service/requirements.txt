@@ -9,3 +9,8 @@ langchain-anthropic
 langgraph
 langgraph-checkpoint-postgres
 psycopg[binary]
+httpx
+trafilatura
+pypdf
+python-docx
+python-multipart

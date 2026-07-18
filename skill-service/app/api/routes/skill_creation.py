@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,20 +25,6 @@ def _get_user_id(credentials: HTTPAuthorizationCredentials) -> str:
     if not payload or payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="UNAUTHORIZED")
     return payload["sub"]
-
-
-def _extract_text(content) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "text":
-                parts.append(block.get("text", ""))
-            elif isinstance(block, str):
-                parts.append(block)
-        return "\n".join(parts)
-    return str(content) if content else ""
 
 
 async def _combine_sources(message: str, links: list[str], files: list[UploadFile]) -> str:
@@ -83,9 +69,6 @@ async def _invoke(
     agent = build_creator_graph(request.app.state.checkpointer)
     config = {"configurable": {"thread_id": draft.thread_id}}
 
-    before_state = await agent.aget_state(config)
-    before_count = len(before_state.values.get("messages", [])) if before_state and before_state.values else 0
-
     # Anthropic API는 system만 있고 messages가 비어있으면 400을 낸다. 카테고리 선택 직후처럼
     # 아직 사용자 메시지가 없는 시점(진입 문구만 필요한 상황)에도 최소 1개는 채워 보낸다.
     input_messages = [HumanMessage(content=human_message or "(진행)")]
@@ -98,10 +81,14 @@ async def _invoke(
     await db.commit()
     await db.refresh(draft)
 
-    new_messages = result_state["messages"][before_count + len(input_messages) :]
-    replies = [_extract_text(m.content) for m in new_messages if isinstance(m, AIMessage)]
-
-    return CreationResponse(draft_id=draft.id, stage=draft.stage, messages=replies, skill_info=draft.skill_info)
+    return CreationResponse(
+        draft_id=draft.id,
+        stage=draft.stage,
+        messages=result_state.get("turn_messages", []),
+        skill_info=draft.skill_info,
+        choices=result_state.get("choices"),
+        summary=bool(result_state.get("summary", False)),
+    )
 
 
 @router.post("", response_model=CreationResponse)
@@ -212,6 +199,7 @@ async def confirm_draft(
         title=name,
         description=draft.skill_info.get("definition"),
         md_content=render_md_content(draft.skill_info),
+        category=draft.skill_info.get("category") or "미분류",
     )
     db.add(skill)
     await db.commit()

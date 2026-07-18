@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -6,3 +8,5 @@ class CreationResponse(BaseModel):
     stage: str
     messages: list[str]
     skill_info: dict
+    choices: Optional[list[str]] = None
+    summary: bool = False

@@ -7,6 +7,9 @@ def merge_content(skill_info: dict, args: dict) -> dict:
 
 
 def merge_name(skill_info: dict, args: dict) -> dict:
+    # NameTurn.name은 done=true인 턴에만 채워지고, 그 전(choices 제시 등) 턴엔 None으로 온다.
+    if args.get("name") is None:
+        return skill_info
     return {**skill_info, "name": args["name"]}
 
 

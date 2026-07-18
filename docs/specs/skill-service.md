@@ -611,8 +611,8 @@ message/links/files가 전부 비어있으면 422. 응답 형식은 6-10과 동�
 ## 9. 아직 구현되지 않은 범위 (2026-07-18 기준)
 
 - **스킬 공개 검색/발견(discovery)**: 지금은 `GET /skills`로 전체 목록을 가져오거나 `user_id`로 필터링하는 것만 가능하고, 태그/키워드 검색, 추천, 팔로우 기반 피드는 없다. 이 기능은 skill-service 범위가 아니라 아직 미구현 상태인 **feed-service**에서 다룰 예정.
-- **실제(프로덕션) 프론트엔드 연동**: `/skills/create/*`는 아직 어떤 프론트엔드와도 안 붙어있고, CORS 설정도 안 돼 있다. 요청/응답 형태, 인증 흐름 등이 바뀔 수 있다.
-- **`skill_test`/`skill_improve` 루프, 확정(confirm)**: `what_skill → skill_content → skill_name` 전환까지는 실제 서버로 검증했지만, `skill_test`의 실제 이중 실행 채점과 `skill_improve` 재인터뷰, `/confirm`은 아직 라이브로 검증되지 않았다.
+- **실제(프로덕션) 로그인 연동**: `frontend/`가 `/skills/create/*`를 직접 호출하는 로컬 연동은 CORS 포함해 라이브로 검증됐지만(`docs/frontend-integration.md` 참고), 이건 임시 개발용 토큰으로 우회한 것이고 user-service의 실제 로그인 흐름과는 아직 연결되지 않았다.
+- ~~`skill_test`/`skill_improve` 루프, 확정(confirm)~~: `what_skill → skill_content → skill_name → skill_test`(실제 이중 실행 채점) → `skill_improve`(재인터뷰) → `retest`(재이중실행) → `/confirm`까지 전체 파이프라인이 실제 서버로 라이브 검증 완료(2026-07-19). 검증 중 `retest`가 누적 대화 히스토리 때문에 실제로 재테스트를 실행하지 않고 대화만 마무리해버리는 버그를 발견해 수정함(`retest_draft`가 human_message로 재테스트 시작을 명시적으로 안내하도록 변경).
 - **feed-service 자체**: `docker-compose.yml`에 서비스로 등록돼 있지 않고 `Dockerfile`만 존재, 코드 미구현.
 
 ---

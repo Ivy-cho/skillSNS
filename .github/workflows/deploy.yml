@@ -1,0 +1,33 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [backend]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff
+        run: ruff check user-service/ skill-service/
+
+  deploy:
+    name: Deploy to Render
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy user-service
+        run: curl -f "${{ secrets.RENDER_DEPLOY_HOOK_USER_SERVICE }}"
+
+      - name: Deploy skill-service
+        run: curl -f "${{ secrets.RENDER_DEPLOY_HOOK_SKILL_SERVICE }}"

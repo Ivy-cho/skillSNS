@@ -116,7 +116,66 @@ python run.py        # Windows는 반드시 run.py로 실행 (uvicorn 직접 실
 
 ---
 
-## 4. 테스트
+## 4. 배포 (Render + GitHub Actions)
+
+`backend` 브랜치에 push하면 GitHub Actions가 lint를 실행하고, 통과 시 Render에 자동 배포됩니다.
+
+### 4-1. Render 초기 설정
+
+1. [Render](https://render.com) 회원가입 → GitHub 계정 연동
+
+2. 대시보드에서 **New → Blueprint** 선택 → 이 저장소 연결
+   - `render.yaml`을 자동으로 인식해 두 서비스를 생성함
+
+3. 각 서비스에서 환경변수 설정 (Dashboard → 서비스 → Environment)
+
+   **skillsns-user-service**
+   ```
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_ANON_KEY=...
+   SUPABASE_SERVICE_KEY=...
+   DATABASE_URL=postgresql+asyncpg://...
+   JWT_SECRET_KEY=...
+   CALLBACK_URL=https://skillsns-user-service.onrender.com/auth/callback
+   ```
+
+   **skillsns-skill-service**
+   ```
+   DATABASE_URL=postgresql+asyncpg://...
+   JWT_SECRET_KEY=...    # user-service와 동일한 값
+   ANTHROPIC_API_KEY=...
+   ```
+
+   > `CALLBACK_URL`은 Render가 서비스를 생성한 뒤 확인할 수 있는 실제 URL로 입력합니다.
+   > Supabase 대시보드 → Authentication → URL Configuration에도 동일하게 등록해야 합니다.
+
+4. 각 서비스의 **Deploy Hook URL** 복사
+   - Dashboard → 서비스 → Settings → Deploy Hook
+
+### 4-2. GitHub Secrets 등록
+
+GitHub 저장소 → Settings → Secrets and variables → Actions → **New repository secret**
+
+| Secret 이름 | 값 |
+|---|---|
+| `RENDER_DEPLOY_HOOK_USER_SERVICE` | Render user-service Deploy Hook URL |
+| `RENDER_DEPLOY_HOOK_SKILL_SERVICE` | Render skill-service Deploy Hook URL |
+
+### 4-3. 동작 방식
+
+```
+git push (backend 브랜치)
+  └─ GitHub Actions
+       ├─ lint (ruff) → 실패 시 배포 중단
+       └─ 통과 시 Render Deploy Hook 호출 → 자동 배포
+```
+
+> **Render 무료 플랜 주의사항**: 15분 이상 요청이 없으면 서비스가 슬립 상태로 전환됩니다.
+> 첫 요청 시 30-50초 콜드 스타트가 발생합니다. 포트폴리오 용도면 충분합니다.
+
+---
+
+## 5. 테스트
 
 ### 테스트 UI (브라우저)
 

@@ -166,7 +166,9 @@ async def retest_draft(
     draft.stage = "skill_test"
     await db.commit()
     await db.refresh(draft)
-    return await _invoke(request, db, draft, human_message=None)
+    return await _invoke(
+        request, db, draft, human_message="(재테스트 시작) 개선된 내용을 반영해서 테스트를 처음부터 다시 진행해주세요."
+    )
 
 
 @router.get("/{draft_id}", response_model=CreationResponse)

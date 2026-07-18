@@ -150,7 +150,8 @@ Authorization: Bearer {access_token}
 {
   "title": "Python 전문가",
   "description": "Python 백엔드 개발 10년 경력",
-  "md_content": "# Python 전문가\n\n## 전문 분야\n..."
+  "md_content": "# Python 전문가\n\n## 전문 분야\n...",
+  "category": "커리어"
 }
 ```
 
@@ -161,6 +162,7 @@ Authorization: Bearer {access_token}
   "user_id": "uuid",
   "title": "Python 전문가",
   "description": "Python 백엔드 개발 10년 경력",
+  "category": "커리어",
   "created_at": "2026-06-29T00:00:00Z"
 }
 ```
@@ -195,6 +197,7 @@ Authorization: Bearer {access_token}
     "user_id": "uuid",
     "title": "Python 전문가",
     "description": "Python 백엔드 개발 10년 경력",
+    "category": "커리어",
     "created_at": "2026-06-29T00:00:00Z"
   }
 ]
@@ -218,6 +221,7 @@ Authorization: Bearer {access_token}
   "user_id": "uuid",
   "title": "Python 전문가",
   "description": "Python 백엔드 개발 10년 경력",
+  "category": "커리어",
   "md_content": "# Python 전문가\n\n## 전문 분야\n...",
   "created_at": "2026-06-29T00:00:00Z"
 }
@@ -533,9 +537,9 @@ message/links/files가 전부 비어있으면 422. 응답 형식은 6-10과 동�
 | 설명 | `skill_info.name`과 `skill_info.content`가 채워진 draft를 실제 `Skill`로 등록한다. `content`는 `render_md_content()`로 하나의 마크다운 시스템 프롬프트로 조립된다. |
 | 인증 | Access Token 필요 (본인만) |
 
-**응답 (201 Created)** — 기존 `POST /skills`와 동일한 `SkillSummary`
+**응답 (201 Created)** — 기존 `POST /skills`와 동일한 `SkillSummary`. `category`는 draft 시작 시 골랐던 값이 그대로 옮겨진다.
 ```json
-{ "id": "uuid", "user_id": "uuid", "title": "6평 원룸 가구 배치 가이드", "description": "...", "created_at": "2026-07-18T00:00:00Z" }
+{ "id": "uuid", "user_id": "uuid", "title": "6평 원룸 가구 배치 가이드", "description": "...", "category": "인테리어", "created_at": "2026-07-18T00:00:00Z" }
 ```
 
 **에러 응답**
@@ -558,6 +562,7 @@ message/links/files가 전부 비어있으면 422. 응답 형식은 6-10과 동�
 | title | VARCHAR | 스킬 이름 |
 | description | TEXT | 스킬 설명 |
 | md_content | TEXT | .md 파일 전체 내용 |
+| category | VARCHAR(50) | 카테고리(자유 텍스트, "기타" 커스텀 입력 포함 — 정규화 테이블 없음) |
 | created_at | TIMESTAMP | 등록일 |
 | updated_at | TIMESTAMP | 수정일 |
 

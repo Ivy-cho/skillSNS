@@ -30,6 +30,7 @@ async def create_skill(
         title=body.title,
         description=body.description,
         md_content=body.md_content,
+        category=body.category,
     )
     db.add(skill)
     await db.commit()

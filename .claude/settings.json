@@ -1,0 +1,57 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\": \"[skillSNS] Agent/Prompt 오케스트레이션 기반 Skill SNS MSA 프로젝트. 각 마이크로서비스는 독립 디렉토리로 구성됩니다.\"}'",
+            "statusMessage": "프로젝트 컨텍스트 로딩 중..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '\"[\" + (now | strftime(\"%Y-%m-%d %H:%M:%S\")) + \"] \" + .tool_input.command' >> ~/.claude/skillsns-bash-log.txt 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | grep -E '\\.py$' | { read -r f; [ -n \"$f\" ] && ruff format \"$f\" 2>/dev/null && echo \"[ruff] formatted: $f\"; } || true",
+            "statusMessage": "ruff 포맷팅 중..."
+          },
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath // empty' | grep -E '\\.py$' | { read -r f; [ -n \"$f\" ] && pytest --tb=short -q --no-header 2>/dev/null | tail -5; } || true",
+            "statusMessage": "pytest 실행 중...",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[$(date '+%Y-%m-%d %H:%M:%S')] 세션 종료\" >> ~/.claude/skillsns-session-log.txt 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "additionalDirectories": ["C:/Users/eunbi/skillSNS/skillSNS"]
+  }
+}

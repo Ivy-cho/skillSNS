@@ -9,22 +9,22 @@ export function AttachModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onAttach: (fileName: string) => void;
+  onAttach: (file: File) => void;
 }) {
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   if (!open) return null;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) setFileName(file.name);
+    const picked = e.target.files?.[0];
+    if (picked) setFile(picked);
   }
 
   function handleConfirm() {
-    if (!fileName) return;
-    onAttach(fileName);
-    setFileName(null);
+    if (!file) return;
+    onAttach(file);
+    setFile(null);
     onClose();
   }
 
@@ -49,7 +49,7 @@ export function AttachModal({
           className="mt-4 flex w-full flex-col items-center gap-1.5 rounded-xl border-[1.5px] border-dashed border-border py-6 text-[0.82rem] text-muted transition hover:border-primary hover:text-primary-hover"
         >
           <span className="text-xl">📎</span>
-          {fileName ?? "클릭해서 파일 선택"}
+          {file?.name ?? "클릭해서 파일 선택"}
         </button>
         <input
           ref={inputRef}
@@ -70,7 +70,7 @@ export function AttachModal({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!fileName}
+            disabled={!file}
             className="flex-1 rounded-full bg-primary px-3.5 py-2 text-[0.82rem] font-semibold text-on-primary disabled:opacity-40"
           >
             첨부하기

@@ -130,3 +130,22 @@
 | Docker | 무료 |
 | LLM API | **유료** (별도 결정) |
 | 기타 | 무료 |
+
+---
+
+## 7. AI 스킬 생성 엔진
+
+### 결정: Anthropic 공식 Agent Skills를 직접 연동하지 않고, 기존 스택(`langchain-anthropic`/`langgraph`)으로 자체 구현
+
+#### 검토한 후보
+| 후보 | 검토 내용 |
+|---|---|
+| Anthropic Agent Skills API 직접 연동 (`/v1/skills` + code execution tool) | `skill-creator` 스킬을 code execution VM에서 실행해 실제 SKILL.md를 생성하는 것이 기술적으로 가능. 하지만 VM 샌드박스, `/v1/skills` 업로드, SKILL.md 번들 포맷(progressive disclosure, scripts/references)이 전부 필요함. 이 프로젝트는 "Claude 자신에게 새 도구를 장착"하는 게 아니라 "채팅 페르소나 시스템 프롬프트 문서 하나"만 필요해서 목적이 불일치하고 인프라만 무거워짐 ❌ 제외 |
+| 직접 구현 (langgraph 커스텀 그래프) | 기존에 쓰던 스택을 그대로 재사용 ✅ 채택 |
+
+#### 구현 방식의 변화
+
+처음엔 skill-creator의 핵심 절차(인터뷰 → 초안 → 자체 테스트 → assertion 기반 채점 → 재작성)만 가볍게 이식한 단일 그래프(`interview → self_test → critique` 순환, 내부 평가는 API에 노출 안 함)로 구현했었다. 이후 `skillsns-main` 프론트엔드의 `workflows/*.md`(what-skill → skill-content → skill-name → skill-test → skill-improve, 5단계) 설계로 교체했다 — 자세한 구조는 `docs/specs/skill-service.md` 4-1절과 `skill-service/app/agent/creator/` 참고.
+
+#### 채택 이유 (Anthropic Agent Skills API를 안 쓴 이유는 여전히 유효)
+- 실제 skill-creator의 신뢰성은 특별한 모델/기술이 아니라 "테스트를 먼저 돌려보고 객관적 기준으로 채점한 뒤 고친다"는 절차에서 나온다는 판단은 그대로 유지된다. 다만 그 절차를 사용자에게 숨긴 내부 처리로 둘지, 아니면 사용자가 직접 보고 판단하는 단계(현재의 skill-test/skill-improve)로 노출할지가 바뀌었다.

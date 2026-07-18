@@ -49,8 +49,7 @@ class SkillDraft(Base):
     # workflows/skill_creation 5단계 파이프라인용. stage는 어느 노드에 있는지,
     # skill_info는 skill_info.schema.json과 같은 모양으로 단계별 필드가 누적되는 단일 객체.
     # (옛 status/title/description/md_content 컬럼은 제거됨 — 이제 이 값들은 skill_info 안에서만 관리된다.
-    #  이 컬럼들을 직접 읽던 app/agent/creator_graph.py + skill_creator.py 라우트는 더 이상
-    #  main.py에 연결돼 있지 않다. 파일 자체는 참고용으로 남겨뒀다.)
+    #  이 컬럼들을 읽던 옛 creator_graph.py/skill_creator.py 라우트는 이 설계로 완전히 대체돼 삭제됨.)
     stage: Mapped[str] = mapped_column(String, nullable=False, default="what_skill")
     skill_info: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(

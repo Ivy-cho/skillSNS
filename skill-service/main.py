@@ -31,9 +31,6 @@ app = FastAPI(title="skillSNS - Skill Service", version="1.0.0", lifespan=lifesp
 app.include_router(skills_router)
 app.include_router(chat_router)
 app.include_router(skill_creation_router)
-# 옛 app/api/routes/skill_creator.py(+ app/agent/creator_graph.py)는 workflows/skill_creation
-# 5단계 설계로 대체됐다. SkillDraft의 status/title/description/md_content 컬럼이 제거되면서
-# 이제 그 라우트를 등록하면 요청 시점에 깨지므로 여기서 뺐다. 파일 자체는 참고용으로 남겨둠.
 
 
 @app.get("/health")

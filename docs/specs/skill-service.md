@@ -65,21 +65,22 @@
 ```
 START ──(state.stage 값으로 바로 진입)──┐
                                         ▼
-                              ┌─────────────┐   tool_call 없음 → END (다음 사용자 메시지 대기)
-                              │ what_skill  │──┐
-                              └─────────────┘  │ tool_call 있음 → 같은 턴에 이어서
-                                                ▼
                               ┌─────────────┐
-                              │skill_content│──┐ (동일하게 이어짐)
-                              └─────────────┘  ▼
+                              │ what_skill  │
+                              └─────────────┘
+                                    │ tool_call 없음 → END (다음 사용자 메시지 대기, stage 그대로)
+                                    │ tool_call 있음 → skill_info 반영 + state.stage="skill_content" → END
                               ┌─────────────┐
-                              │ skill_name  │──┐
-                              └─────────────┘  ▼
+                              │skill_content│  (동일한 패턴)
+                              └─────────────┘
+                              ┌─────────────┐
+                              │ skill_name  │  (동일한 패턴, 완료 시 stage="skill_test")
+                              └─────────────┘
                               ┌─────────────┐
                               │ skill_test  │  실제로 스킬 켠 답변 vs baseline(스킬 없이)
                               └─────────────┘  답변을 돌려 채점 (전용 구현, 아래 참고)
                                     │
-                     사용자가 결과 보고 선택 (자동 전환 아님)
+                     사용자가 결과 보고 선택 (다음 요청을 뭘로 보내느냐로 결정)
                     ┌───────────────┴───────────────┐
                     ▼                                ▼
           POST .../improve                  POST .../confirm
@@ -92,8 +93,10 @@ START ──(state.stage 값으로 바로 진입)──┐
           사용자가 다시 skill_test 요청(POST .../retest) 또는 확정
 ```
 
-- `what_skill → skill_content → skill_name`은 각 단계 완료(tool_call 발생) 시 **같은 API 호출 안에서** 자동으로 다음 단계까지 이어진다 — `stage_runner.py`의 노드가 완료 시 `state.stage`를 직접 다음 단계로 바꿔놓고, 라우터는 그 값만 보고 이어갈지 판단한다.
-- `skill_test`는 나머지 4개와 달리 전용 구현(`test_node.py`)이 필요하다 — LLM이 테스트 질문을 확정하면, 코드가 실제로 임시 스킬 에이전트와 baseline(스킬 없는) 에이전트를 둘 다 띄워 그 질문들을 돌리고, 그 결과(+실측 응답시간/토큰)를 다시 LLM에 넘겨 8개 영역을 채점시킨다.
+- **호출 하나 = 단계 하나.** 어떤 단계도 완료 즉시 다음 단계로 자동으로 이어가지 않는다 — `tool_call`이 나면 그 안에서 `skill_info`를 반영하고 `state.stage`만 다음 단계로 바꾼 뒤 그 자리에서 끝난다(`END`). 다음 단계로 넘어갈지, 언제 넘어갈지는 전적으로 **클라이언트가 다음 요청을 보내는 시점**이 결정한다 — 그 요청이 오면 `START`가 이미 바뀐 `state.stage`를 보고 알아서 그 단계 노드로 들어간다.
+  - 이렇게 설계한 이유: 여러 단계를 한 호출에 자동으로 묶으면, 호출 중간에 실패했을 때 "어디까지 반영됐는지"가 애매해진다(실제로 이 문제로 tool_result 처리 버그가 한 번 났었다). 호출 하나가 단계 하나에 정확히 대응해야 부분 실패 시에도 상태가 항상 명확하다.
+  - 그래서 한 번의 `POST /skills/create/{id}` 응답의 `messages` 배열은 (skill_test의 질문확정→채점처럼 한 단계 내부에서 LLM을 여러 번 부르는 경우가 아니면) 보통 새 AI 메시지 1개만 담는다.
+- `skill_test`는 나머지 4개와 달리 전용 구현(`test_node.py`)이 필요하다 — LLM이 테스트 질문을 확정하면, 코드가 실제로 임시 스킬 에이전트와 baseline(스킬 없는) 에이전트를 둘 다 띄워 그 질문들을 돌리고, 그 결과(+실측 응답시간/토큰)를 다시 LLM에 넘겨 8개 영역을 채점시킨다. (이건 같은 단계 안에서 스스로 할 일을 마치는 것이지, 다음 단계로 자동 전환하는 게 아니라서 위 원칙과 모순되지 않는다.)
 - `skill_test`와 `skill_improve`는 완료돼도 자동으로 서로 넘어가지 않는다 — 사용자가 결과를 보고 개선/재테스트/확정을 직접 고르며, 그 전환은 API 라우트가 `SkillDraft.stage`를 바꿔서 처리한다.
 - 각 단계가 채우는 `skill_info` 필드는 `app/prompts/skill_creation/schemas/skill_info.schema.json`에, `skill_test`의 출력 구조는 `test_report.schema.json`에 정의돼 있다.
 
@@ -455,7 +458,7 @@ Authorization: Bearer {access_token}
 }
 ```
 
-`messages`는 이번 호출로 새로 생긴 AI 메시지 배열이다 — 여러 단계가 한 턴에 자동으로 이어지면(예: skill_content 확정 → skill_name 시작) 2개 이상 담길 수 있다. `skill_info`는 지금까지 누적된 전체 상태(`skill_info.schema.json` 구조)를 매번 통째로 반환한다.
+`messages`는 이번 호출로 새로 생긴 AI 메시지 배열이다(보통 1개 — 한 단계가 스스로 LLM을 여러 번 부르는 경우(`skill_test`)만 예외). `skill_info`는 지금까지 누적된 전체 상태(`skill_info.schema.json` 구조)를 매번 통째로 반환한다.
 
 ---
 
@@ -465,7 +468,7 @@ Authorization: Bearer {access_token}
 |---|---|
 | Method | `POST` |
 | URL | `/skills/create/{draft_id}` |
-| 설명 | 현재 `stage`의 노드에 메시지/링크/파일을 보낸다. 완료 조건을 채우면(tool_call 발생) 자동으로 이어지는 단계까지 같은 응답에 포함된다. |
+| 설명 | 현재 `stage`의 노드에 메시지/링크/파일을 보낸다. 완료 조건을 채우면(tool_call 발생) 응답의 `stage`가 다음 단계로 바뀐다 — 단, 그 다음 단계 자체를 진행시키려면 클라이언트가 이 엔드포인트를 다시 호출해야 한다(자동으로 이어지지 않음). |
 | 인증 | Access Token 필요 (본인만) |
 | Content-Type | `multipart/form-data` |
 

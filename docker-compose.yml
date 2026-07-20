@@ -17,6 +17,19 @@ services:
     networks:
       - skillsns-network
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8002}
+        NEXT_PUBLIC_DEV_TOKEN: ${NEXT_PUBLIC_DEV_TOKEN}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - skill-service
+    networks:
+      - skillsns-network
+
 networks:
   skillsns-network:
     driver: bridge

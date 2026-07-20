@@ -65,21 +65,22 @@
 ```
 START ──(state.stage 값으로 바로 진입)──┐
                                         ▼
-                              ┌─────────────┐   tool_call 없음 → END (다음 사용자 메시지 대기)
-                              │ what_skill  │──┐
-                              └─────────────┘  │ tool_call 있음 → 같은 턴에 이어서
-                                                ▼
                               ┌─────────────┐
-                              │skill_content│──┐ (동일하게 이어짐)
-                              └─────────────┘  ▼
+                              │ what_skill  │
+                              └─────────────┘
+                                    │ tool_call 없음 → END (다음 사용자 메시지 대기, stage 그대로)
+                                    │ tool_call 있음 → skill_info 반영 + state.stage="skill_content" → END
                               ┌─────────────┐
-                              │ skill_name  │──┐
-                              └─────────────┘  ▼
+                              │skill_content│  (동일한 패턴)
+                              └─────────────┘
+                              ┌─────────────┐
+                              │ skill_name  │  (동일한 패턴, 완료 시 stage="skill_test")
+                              └─────────────┘
                               ┌─────────────┐
                               │ skill_test  │  실제로 스킬 켠 답변 vs baseline(스킬 없이)
                               └─────────────┘  답변을 돌려 채점 (전용 구현, 아래 참고)
                                     │
-                     사용자가 결과 보고 선택 (자동 전환 아님)
+                     사용자가 결과 보고 선택 (다음 요청을 뭘로 보내느냐로 결정)
                     ┌───────────────┴───────────────┐
                     ▼                                ▼
           POST .../improve                  POST .../confirm
@@ -92,8 +93,10 @@ START ──(state.stage 값으로 바로 진입)──┐
           사용자가 다시 skill_test 요청(POST .../retest) 또는 확정
 ```
 
-- `what_skill → skill_content → skill_name`은 각 단계 완료(tool_call 발생) 시 **같은 API 호출 안에서** 자동으로 다음 단계까지 이어진다 — `stage_runner.py`의 노드가 완료 시 `state.stage`를 직접 다음 단계로 바꿔놓고, 라우터는 그 값만 보고 이어갈지 판단한다.
-- `skill_test`는 나머지 4개와 달리 전용 구현(`test_node.py`)이 필요하다 — LLM이 테스트 질문을 확정하면, 코드가 실제로 임시 스킬 에이전트와 baseline(스킬 없는) 에이전트를 둘 다 띄워 그 질문들을 돌리고, 그 결과(+실측 응답시간/토큰)를 다시 LLM에 넘겨 8개 영역을 채점시킨다.
+- **호출 하나 = 단계 하나.** 어떤 단계도 완료 즉시 다음 단계로 자동으로 이어가지 않는다 — `tool_call`이 나면 그 안에서 `skill_info`를 반영하고 `state.stage`만 다음 단계로 바꾼 뒤 그 자리에서 끝난다(`END`). 다음 단계로 넘어갈지, 언제 넘어갈지는 전적으로 **클라이언트가 다음 요청을 보내는 시점**이 결정한다 — 그 요청이 오면 `START`가 이미 바뀐 `state.stage`를 보고 알아서 그 단계 노드로 들어간다.
+  - 이렇게 설계한 이유: 여러 단계를 한 호출에 자동으로 묶으면, 호출 중간에 실패했을 때 "어디까지 반영됐는지"가 애매해진다(실제로 이 문제로 tool_result 처리 버그가 한 번 났었다). 호출 하나가 단계 하나에 정확히 대응해야 부분 실패 시에도 상태가 항상 명확하다.
+  - 그래서 한 번의 `POST /skills/create/{id}` 응답의 `messages` 배열은 (skill_test의 질문확정→채점처럼 한 단계 내부에서 LLM을 여러 번 부르는 경우가 아니면) 보통 새 AI 메시지 1개만 담는다.
+- `skill_test`는 나머지 4개와 달리 전용 구현(`test_node.py`)이 필요하다 — LLM이 테스트 질문을 확정하면, 코드가 실제로 임시 스킬 에이전트와 baseline(스킬 없는) 에이전트를 둘 다 띄워 그 질문들을 돌리고, 그 결과(+실측 응답시간/토큰)를 다시 LLM에 넘겨 8개 영역을 채점시킨다. (이건 같은 단계 안에서 스스로 할 일을 마치는 것이지, 다음 단계로 자동 전환하는 게 아니라서 위 원칙과 모순되지 않는다.)
 - `skill_test`와 `skill_improve`는 완료돼도 자동으로 서로 넘어가지 않는다 — 사용자가 결과를 보고 개선/재테스트/확정을 직접 고르며, 그 전환은 API 라우트가 `SkillDraft.stage`를 바꿔서 처리한다.
 - 각 단계가 채우는 `skill_info` 필드는 `app/prompts/skill_creation/schemas/skill_info.schema.json`에, `skill_test`의 출력 구조는 `test_report.schema.json`에 정의돼 있다.
 
@@ -147,7 +150,8 @@ Authorization: Bearer {access_token}
 {
   "title": "Python 전문가",
   "description": "Python 백엔드 개발 10년 경력",
-  "md_content": "# Python 전문가\n\n## 전문 분야\n..."
+  "md_content": "# Python 전문가\n\n## 전문 분야\n...",
+  "category": "커리어"
 }
 ```
 
@@ -158,6 +162,7 @@ Authorization: Bearer {access_token}
   "user_id": "uuid",
   "title": "Python 전문가",
   "description": "Python 백엔드 개발 10년 경력",
+  "category": "커리어",
   "created_at": "2026-06-29T00:00:00Z"
 }
 ```
@@ -192,6 +197,7 @@ Authorization: Bearer {access_token}
     "user_id": "uuid",
     "title": "Python 전문가",
     "description": "Python 백엔드 개발 10년 경력",
+    "category": "커리어",
     "created_at": "2026-06-29T00:00:00Z"
   }
 ]
@@ -215,6 +221,7 @@ Authorization: Bearer {access_token}
   "user_id": "uuid",
   "title": "Python 전문가",
   "description": "Python 백엔드 개발 10년 경력",
+  "category": "커리어",
   "md_content": "# Python 전문가\n\n## 전문 분야\n...",
   "created_at": "2026-06-29T00:00:00Z"
 }
@@ -455,7 +462,7 @@ Authorization: Bearer {access_token}
 }
 ```
 
-`messages`는 이번 호출로 새로 생긴 AI 메시지 배열이다 — 여러 단계가 한 턴에 자동으로 이어지면(예: skill_content 확정 → skill_name 시작) 2개 이상 담길 수 있다. `skill_info`는 지금까지 누적된 전체 상태(`skill_info.schema.json` 구조)를 매번 통째로 반환한다.
+`messages`는 이번 호출로 새로 생긴 AI 메시지 배열이다(보통 1개 — 한 단계가 스스로 LLM을 여러 번 부르는 경우(`skill_test`)만 예외). `skill_info`는 지금까지 누적된 전체 상태(`skill_info.schema.json` 구조)를 매번 통째로 반환한다.
 
 ---
 
@@ -465,7 +472,7 @@ Authorization: Bearer {access_token}
 |---|---|
 | Method | `POST` |
 | URL | `/skills/create/{draft_id}` |
-| 설명 | 현재 `stage`의 노드에 메시지/링크/파일을 보낸다. 완료 조건을 채우면(tool_call 발생) 자동으로 이어지는 단계까지 같은 응답에 포함된다. |
+| 설명 | 현재 `stage`의 노드에 메시지/링크/파일을 보낸다. 완료 조건을 채우면(tool_call 발생) 응답의 `stage`가 다음 단계로 바뀐다 — 단, 그 다음 단계 자체를 진행시키려면 클라이언트가 이 엔드포인트를 다시 호출해야 한다(자동으로 이어지지 않음). |
 | 인증 | Access Token 필요 (본인만) |
 | Content-Type | `multipart/form-data` |
 
@@ -530,9 +537,9 @@ message/links/files가 전부 비어있으면 422. 응답 형식은 6-10과 동�
 | 설명 | `skill_info.name`과 `skill_info.content`가 채워진 draft를 실제 `Skill`로 등록한다. `content`는 `render_md_content()`로 하나의 마크다운 시스템 프롬프트로 조립된다. |
 | 인증 | Access Token 필요 (본인만) |
 
-**응답 (201 Created)** — 기존 `POST /skills`와 동일한 `SkillSummary`
+**응답 (201 Created)** — 기존 `POST /skills`와 동일한 `SkillSummary`. `category`는 draft 시작 시 골랐던 값이 그대로 옮겨진다.
 ```json
-{ "id": "uuid", "user_id": "uuid", "title": "6평 원룸 가구 배치 가이드", "description": "...", "created_at": "2026-07-18T00:00:00Z" }
+{ "id": "uuid", "user_id": "uuid", "title": "6평 원룸 가구 배치 가이드", "description": "...", "category": "인테리어", "created_at": "2026-07-18T00:00:00Z" }
 ```
 
 **에러 응답**
@@ -555,6 +562,7 @@ message/links/files가 전부 비어있으면 422. 응답 형식은 6-10과 동�
 | title | VARCHAR | 스킬 이름 |
 | description | TEXT | 스킬 설명 |
 | md_content | TEXT | .md 파일 전체 내용 |
+| category | VARCHAR(50) | 카테고리(자유 텍스트, "기타" 커스텀 입력 포함 — 정규화 테이블 없음) |
 | created_at | TIMESTAMP | 등록일 |
 | updated_at | TIMESTAMP | 수정일 |
 
@@ -603,8 +611,8 @@ message/links/files가 전부 비어있으면 422. 응답 형식은 6-10과 동�
 ## 9. 아직 구현되지 않은 범위 (2026-07-18 기준)
 
 - **스킬 공개 검색/발견(discovery)**: 지금은 `GET /skills`로 전체 목록을 가져오거나 `user_id`로 필터링하는 것만 가능하고, 태그/키워드 검색, 추천, 팔로우 기반 피드는 없다. 이 기능은 skill-service 범위가 아니라 아직 미구현 상태인 **feed-service**에서 다룰 예정.
-- **실제(프로덕션) 프론트엔드 연동**: `/skills/create/*`는 아직 어떤 프론트엔드와도 안 붙어있고, CORS 설정도 안 돼 있다. 요청/응답 형태, 인증 흐름 등이 바뀔 수 있다.
-- **`skill_test`/`skill_improve` 루프, 확정(confirm)**: `what_skill → skill_content → skill_name` 전환까지는 실제 서버로 검증했지만, `skill_test`의 실제 이중 실행 채점과 `skill_improve` 재인터뷰, `/confirm`은 아직 라이브로 검증되지 않았다.
+- **실제(프로덕션) 로그인 연동**: `frontend/`가 `/skills/create/*`를 직접 호출하는 로컬 연동은 CORS 포함해 라이브로 검증됐지만(`docs/frontend-integration.md` 참고), 이건 임시 개발용 토큰으로 우회한 것이고 user-service의 실제 로그인 흐름과는 아직 연결되지 않았다.
+- ~~`skill_test`/`skill_improve` 루프, 확정(confirm)~~: `what_skill → skill_content → skill_name → skill_test`(실제 이중 실행 채점) → `skill_improve`(재인터뷰) → `retest`(재이중실행) → `/confirm`까지 전체 파이프라인이 실제 서버로 라이브 검증 완료(2026-07-19). 검증 중 `retest`가 누적 대화 히스토리 때문에 실제로 재테스트를 실행하지 않고 대화만 마무리해버리는 버그를 발견해 수정함(`retest_draft`가 human_message로 재테스트 시작을 명시적으로 안내하도록 변경).
 - **feed-service 자체**: `docker-compose.yml`에 서비스로 등록돼 있지 않고 `Dockerfile`만 존재, 코드 미구현.
 
 ---

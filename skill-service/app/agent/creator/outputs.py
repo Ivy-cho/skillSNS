@@ -23,10 +23,33 @@ class SkillContentOutput(BaseModel):
     tone: str = Field(default="", description="말투 (사용자가 정한 경우만)")
 
 
-class SkillNameOutput(BaseModel):
-    """3단계(skill-name) 완료 시 호출."""
+class SkillImproveOutput(BaseModel):
+    """5단계(skill-improve) 완료 시 호출. 이번에 보완한 영역만 채우고 나머지는 None으로 둔다."""
 
-    name: str = Field(description="사용자에게 보일 스킬 이름")
+    procedure: Optional[str] = None
+    rules: Optional[str] = None
+    checklist: Optional[str] = None
+    cases: Optional[str] = None
+    knowhow: Optional[str] = None
+    safety: Optional[str] = None
+    tone: Optional[str] = None
+
+
+class NameTurn(BaseModel):
+    """3단계(skill-name) 전용. choices/summary는 이름 짓기에서만 쓰는 기능이라, 이 단계만
+    매 턴 반드시 이 tool로 응답하게 강제한다(다른 4단계는 여전히 완료 시에만 tool을 부른다) —
+    이름 후보를 확정 전에도 화면에 카드로 보여줘야 하기 때문."""
+
+    reply: str = Field(description="사용자에게 보여줄 다음 메시지(말풍선). 짧고 간결하게.")
+    done: bool = Field(description="이름이 확정됐으면 true")
+    choices: Optional[list[str]] = Field(
+        default=None,
+        description="LLM이 제안하는 이름 후보(보통 3개). 각 항목은 이름 문구 그 자체만 "
+        "(순위 숫자·이유 설명 금지 — 이유는 reply에 짧게). 사용자는 이 중 하나를 고르거나 "
+        "채팅으로 직접 이름을 타이핑할 수도 있다.",
+    )
+    summary: bool = Field(default=False, description="확정된 이름을 보여주고 확인받는 순간이면 true")
+    name: Optional[str] = Field(default=None, description="확정된 경우만 채운다")
 
 
 class SampleQuestion(BaseModel):
@@ -71,15 +94,3 @@ class SkillTestOutput(BaseModel):
     diagnosis: list[DiagnosisItem]
     benchmark: Benchmark
     analystNotes: list[str]
-
-
-class SkillImproveOutput(BaseModel):
-    """5단계(skill-improve) 완료 시 호출. 이번에 보완한 영역만 채우고 나머지는 None으로 둔다."""
-
-    procedure: Optional[str] = None
-    rules: Optional[str] = None
-    checklist: Optional[str] = None
-    cases: Optional[str] = None
-    knowhow: Optional[str] = None
-    safety: Optional[str] = None
-    tone: Optional[str] = None

@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+/* Design tokens — see DESIGN.md. Light mode only for this scope. */
+:root {
+  --bg: #fafaf7;
+  --surface: #ffffff;
+  --surface-2: #f0f2ee;
+  --ink: #1e231f;
+  --muted: #5c645d;
+  --outline-strong: #3a3a3a;
+  --primary: #56a67f;
+  --primary-hover: #4a9873;
+  --on-primary: #ffffff;
+  --primary-tint: #dceae1;
+  --border: #dde3dd;
+  --success: #2b8a7e;
+  --warning: #c98a2e;
+  --error: #c65b45;
+  --info: #4c7d94;
+  --info-tint: #e1eaee;
+  --shadow-card: 0 2px 12px rgba(20, 26, 22, 0.07);
+  --shadow-md: 0 8px 24px rgba(20, 26, 22, 0.12);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-outline-strong: var(--outline-strong);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+  --color-primary-tint: var(--primary-tint);
+  --color-border: var(--border);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
+  --color-info-tint: var(--info-tint);
+
+  --font-display: var(--font-plex-serif);
+  --font-body: var(--font-plex-sans-kr);
+  --font-mono: var(--font-plex-mono);
+}
+
+body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body), -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes dot-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+
+@keyframes dot-pop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

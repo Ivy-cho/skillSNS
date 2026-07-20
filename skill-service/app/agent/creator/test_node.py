@@ -13,6 +13,7 @@ from .merges import merge_test_report
 from .outputs import SkillTestOutput
 from .render import render_md_content
 from .state import CreatorState
+from .text import extract_text
 
 BASELINE_PROMPT = (
     "당신은 일반적인 도움을 주는 어시스턴트입니다. "
@@ -43,7 +44,13 @@ def make_skill_test_node():
         response = await propose_llm.ainvoke([system] + state["messages"])
         tool_calls = getattr(response, "tool_calls", None)
         if not tool_calls:
-            return {"messages": [response]}  # 아직 질문 뽑는 중, 대화 계속
+            # 아직 질문 뽑는 중, 대화 계속
+            return {
+                "messages": [response],
+                "turn_messages": [extract_text(response.content)],
+                "choices": None,
+                "summary": False,
+            }
 
         questions: list[str] = tool_calls[0]["args"]["questions"]
         md_content = render_md_content(skill_info)
@@ -89,14 +96,23 @@ def make_skill_test_node():
 
         grade_response = await grade_llm.ainvoke([system, HumanMessage(content="\n".join(transcript_lines))])
         grade_calls = getattr(grade_response, "tool_calls", None)
+        turn_messages = [extract_text(response.content), extract_text(grade_response.content)]
         if not grade_calls:
-            return {"messages": [response, propose_result, grade_response]}
+            return {
+                "messages": [response, propose_result, grade_response],
+                "turn_messages": turn_messages,
+                "choices": None,
+                "summary": False,
+            }
 
         grade_result = ToolMessage(content="ok", tool_call_id=grade_calls[0]["id"])
         updated_info = merge_test_report(skill_info, grade_calls[0]["args"])
         return {
             "messages": [response, propose_result, grade_response, grade_result],
             "skill_info": updated_info,
+            "turn_messages": turn_messages,
+            "choices": None,
+            "summary": False,
         }
 
     return node

@@ -119,7 +119,6 @@ export function SkillCreator() {
   // 렌더용: 이모지/id가 필요해 Category 객체로 따로 들고 있다 (backend엔 label만 보낸다).
   const [category, setCategory] = useState<Category | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
-  // workflows/skill_info.json 스키마 그대로. backend 응답을 그대로 merge해서 채운다.
   const [skillInfo, setSkillInfo] = useState<SkillInfo>(EMPTY_SKILL_INFO);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pending, setPending] = useState<{ choices?: string[] | null; summary?: boolean }>({});

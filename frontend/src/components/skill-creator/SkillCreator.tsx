@@ -124,6 +124,7 @@ export function SkillCreator() {
   const [pending, setPending] = useState<{ choices?: string[] | null; summary?: boolean }>({});
   const [isTyping, setIsTyping] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [publishedSkill, setPublishedSkill] = useState<PublishedSkill | null>(null);
   const idRef = useRef(0);
@@ -216,6 +217,7 @@ export function SkillCreator() {
   async function handleAttach(file: File) {
     if (!draftId) return;
     pushMessage("user", file.name, "attachment");
+    setAttachments((prev) => [...prev, file]);
     setPending({});
     setError(null);
     setIsTyping(true);
@@ -262,11 +264,6 @@ export function SkillCreator() {
 
   const version = category ? `skill_${category.id}_v1.0` : "";
   const slug = publishedSkill?.id ?? "";
-
-  const markdown = `# ${publishedSkill?.title ?? skillName}
-
-${publishedSkill?.description ?? definition}
-`;
 
   const inputDisabled =
     phase === "category" || phase === "reviewing" || phase === "testing" || phase === "published" || isTyping;
@@ -414,11 +411,10 @@ ${publishedSkill?.description ?? definition}
 
             {phase === "published" && (publishedSkill?.title ?? skillName) && (
               <PackagedResult
-                skillName={publishedSkill?.title ?? skillName}
+                info={skillInfo}
                 version={version}
-                category={category?.label ?? ""}
                 categoryEmoji={category?.emoji ?? "🤖"}
-                markdown={markdown}
+                attachments={attachments}
                 slug={slug}
               />
             )}

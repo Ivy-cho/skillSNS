@@ -1,6 +1,6 @@
 "use client";
 
-import { type SkillContent, type SkillInfo, skillMarkdown } from "./types";
+import { type SkillContent, type SkillInfo } from "./types";
 
 const SECTION_LABELS: { key: keyof SkillContent; label: string }[] = [
   { key: "procedure", label: "절차" },
@@ -12,32 +12,16 @@ const SECTION_LABELS: { key: keyof SkillContent; label: string }[] = [
   { key: "tone", label: "말투" },
 ];
 
+// 보기 전용 미리보기 — 다운로드는 게시 화면의 패키지(.zip) 한 곳에서만 한다.
 export function SkillPreview({ info }: { info: SkillInfo }) {
-  const sections = SECTION_LABELS.filter(({ key }) => info.content[key].trim());
-
-  function handleDownload() {
-    const blob = new Blob([skillMarkdown(info)], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${info.name || "skill"}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+  const sections = SECTION_LABELS.filter(({ key }) => (info.content[key] ?? "").trim());
 
   return (
     <div className="rounded-2xl border border-border bg-surface">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <span className="flex items-center gap-1.5 font-mono text-[0.72rem] text-muted">
           📄 {info.name || "skill"}.md
         </span>
-        <button
-          type="button"
-          onClick={handleDownload}
-          className="shrink-0 rounded-full border border-border px-2.5 py-1 text-[0.72rem] font-semibold text-primary-hover transition hover:border-primary active:scale-[0.97]"
-        >
-          ⬇ 저장
-        </button>
       </div>
 
       <div className="px-4 py-3">

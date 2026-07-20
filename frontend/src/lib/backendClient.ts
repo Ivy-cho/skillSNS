@@ -18,7 +18,15 @@ export type PublishedSkill = {
   user_id: string;
   title: string;
   description: string | null;
+  category: string;
   created_at: string;
+};
+
+export type SkillDetail = PublishedSkill & { md_content: string };
+
+export type ChatResponse = {
+  session_id: string | null;
+  reply: string;
 };
 
 class BackendError extends Error {}
@@ -32,6 +40,30 @@ async function postForm(path: string, form?: FormData): Promise<CreationResponse
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new BackendError(body.detail ?? `요청이 실패했어요 (${res.status})`);
+  }
+  return res.json();
+}
+
+async function getJSON<T>(path: string): Promise<T> {
+  const res = await fetch(`${BACKEND_URL}${path}`, {
+    headers: { Authorization: `Bearer ${DEV_TOKEN}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new BackendError(body.detail ?? `요청이 실패했어요 (${res.status})`);
+  }
+  return res.json();
+}
+
+async function postJSON<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BACKEND_URL}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${DEV_TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new BackendError(errBody.detail ?? `요청이 실패했어요 (${res.status})`);
   }
   return res.json();
 }
@@ -67,4 +99,17 @@ export async function confirmDraft(draftId: string): Promise<PublishedSkill> {
     throw new BackendError(body.detail ?? `확정에 실패했어요 (${res.status})`);
   }
   return res.json();
+}
+
+// 게시된 스킬로 실제 대화하기 (/skill/[slug] 사용 화면).
+export function getSkill(skillId: string) {
+  return getJSON<SkillDetail>(`/skills/${skillId}`);
+}
+
+export function startChat(skillId: string, message: string) {
+  return postJSON<ChatResponse>(`/chat/${skillId}`, { message });
+}
+
+export function continueChat(skillId: string, sessionId: string, message: string) {
+  return postJSON<ChatResponse>(`/chat/${skillId}/${sessionId}`, { message });
 }

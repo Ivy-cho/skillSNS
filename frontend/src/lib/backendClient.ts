@@ -106,6 +106,11 @@ export function getSkill(skillId: string) {
   return getJSON<SkillDetail>(`/skills/${skillId}`);
 }
 
+// 피드용 스킬 목록 (GET /skills — 공개, 인증 불필요). SkillSummary와 필드가 같아 PublishedSkill 재사용.
+export function listSkills() {
+  return getJSON<PublishedSkill[]>("/skills");
+}
+
 export function startChat(skillId: string, message: string) {
   return postJSON<ChatResponse>(`/chat/${skillId}`, { message });
 }

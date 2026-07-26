@@ -18,6 +18,9 @@ export type ChatMessage = {
   role: "agent" | "user";
   kind: "text" | "attachment";
   content: string;
+  // 어느 단계(page)의 대화인지. 스텝형 스킬 크리에이터에서 각 페이지가 자기 단계의
+  // 메시지만 필터해 보여주기 위해 붙인다. (스킬 사용 챗 등 다른 화면에선 안 씀 → optional)
+  phase?: Phase;
 };
 
 export type Phase =

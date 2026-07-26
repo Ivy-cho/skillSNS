@@ -85,6 +85,17 @@ export function improveDraft(draftId: string) {
   return postForm(`/skills/create/${draftId}/improve`);
 }
 
+// [백엔드 미구현] 이전 단계로 되돌려 그 단계부터 다시 진행하기 위한 계약.
+// 스텝형 UI의 "이 단계부터 수정" 기능이 이 호출에 연결돼 있고, skill-service가
+// 엔드포인트를 제공하기 전까지는 EDIT_BACK_ENABLED 플래그로 UI에서 비활성 상태다.
+// 기대 동작: 해당 stage 이후로 누적된 skill_info를 버리고, 그 stage의 대화 시작
+// 상태(질문 메시지 포함)를 담은 CreationResponse를 반환한다. (계약 상세: BACKEND_HANDOFF.md)
+export function revertToStage(draftId: string, stage: string) {
+  const form = new FormData();
+  form.append("stage", stage);
+  return postForm(`/skills/create/${draftId}/revert`, form);
+}
+
 export function retestDraft(draftId: string) {
   return postForm(`/skills/create/${draftId}/retest`);
 }

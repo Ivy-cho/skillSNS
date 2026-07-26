@@ -7,11 +7,13 @@ export function ChatInputBar({
   onSend,
   onAttach,
   showAttach = true,
+  placeholder = "메시지를 입력하세요...",
 }: {
   disabled: boolean;
   onSend: (text: string) => void;
   onAttach?: () => void;
   showAttach?: boolean;
+  placeholder?: string;
 }) {
   const [value, setValue] = useState("");
 
@@ -43,7 +45,7 @@ export function ChatInputBar({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         disabled={disabled}
-        placeholder="메시지를 입력하세요..."
+        placeholder={placeholder}
         className="flex-1 rounded-full bg-surface-2 px-4 py-2.5 text-base text-ink placeholder:text-muted focus:outline-none disabled:opacity-60 sm:text-[0.85rem]"
       />
       <button

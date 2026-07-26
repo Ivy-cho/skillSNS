@@ -28,3 +28,46 @@
   연동)이 필요.
 - **파일 첨부** — `AttachModal`에서 고른 파일이 `backendClient.continueDraft`로 실제
   전송은 되지만(백엔드가 텍스트만 추출), 첨부 UX(진행 표시, 실패 처리)는 다듬을 여지 있음.
+
+## [백엔드 요청] 이전 단계로 되돌리기 (revert) API
+
+스텝형 UI에서 사용자가 이전 단계로 돌아가 **답을 수정하고 그 단계부터 다시 진행**할 수
+있어야 합니다. 프론트는 이미 다 붙여뒀고(버튼·핸들러·클라이언트 함수), skill-service가
+아래 엔드포인트를 제공하면 프론트에서 플래그 하나만 켜서 활성화됩니다.
+
+- **활성화 플래그**: `SkillCreator.tsx`의 `EDIT_BACK_ENABLED`(현재 `false`). 백엔드가
+  준비되면 `true`로 바꾸면 "이 단계부터 수정" 버튼이 실제 동작.
+- **클라이언트 함수**: `backendClient.ts`의 `revertToStage(draftId, stage)`.
+
+**요청**
+```
+POST /skills/create/{draft_id}/revert
+Content-Type: multipart/form-data
+  stage=<되돌릴 대상 stage 문자열>
+```
+`stage` 값은 기존 파이프라인과 동일한 문자열: `what_skill` | `skill_content` |
+`skill_name` | `skill_test`.
+
+**기대 동작**
+1. 지정한 `stage` **이후로** 누적된 `skill_info` 필드와 대화를 폐기(rewind).
+2. draft의 현재 stage를 지정 stage로 되돌림.
+3. 그 stage의 **시작 상태**(안내/질문 메시지 포함)를 담아 응답.
+
+**응답**: 기존과 동일한 `CreationResponse`
+(`draft_id`, `stage`, `messages`, `skill_info`, `choices?`, `summary?`).
+즉 프론트는 `continueDraft`/`improveDraft`와 똑같이 `applyResponse(res)`로 처리하며,
+반환된 `stage`가 곧 사용자가 다시 진행할 단계가 됩니다.
+
+**엣지 케이스**: 이미 `confirm`(게시)된 draft는 revert 불가 → 409 등 에러 응답 권장
+(`detail` 메시지는 프론트가 그대로 노출).
+
+## [백엔드 확인 필요] 테스트/개선 단계 자유 메시지
+
+스텝형 UI에서 입력창을 2·3단계뿐 아니라 **5(테스트)·6(개선) 단계에도** 띄우기로 했습니다
+(`SkillCreator.tsx`의 `CHAT_INPUT_PHASES`). 사용자가 그 단계에서 입력한 자유 메시지는
+기존 `continueDraft`와 동일하게 `POST /skills/create/{draft_id}` 로 전송됩니다.
+
+- **확인 요청**: skill-service가 `skill_test` / `skill_improve` stage에서 들어온 자유
+  메시지를 받아 처리(예: "이 부분을 이렇게 고쳐줘" 같은 개선 지시 반영)해 주는지 확인 필요.
+- 지금은 프론트에서 전송만 하며, 백엔드가 해당 stage 메시지를 처리하지 않으면 UX가
+  기대대로 동작하지 않을 수 있음. 처리 방식(무시/에러/개선반영)을 정해주세요.

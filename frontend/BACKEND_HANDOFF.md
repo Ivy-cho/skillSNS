@@ -71,3 +71,15 @@ Content-Type: multipart/form-data
   메시지를 받아 처리(예: "이 부분을 이렇게 고쳐줘" 같은 개선 지시 반영)해 주는지 확인 필요.
 - 지금은 프론트에서 전송만 하며, 백엔드가 해당 stage 메시지를 처리하지 않으면 UX가
   기대대로 동작하지 않을 수 있음. 처리 방식(무시/에러/개선반영)을 정해주세요.
+
+## [백엔드 데이터 품질] 테스트 리포트(test_report)가 불완전하게 오는 경우
+
+채점(`test_node`의 `grade_llm` → `SkillTestOutput`)이 **가끔 리포트를 불완전하게 생성**함.
+실제 관측: 채점은 200 OK로 성공했는데 `benchmark.passRate`가 통째로 빠진 리포트가 와서
+프론트 `TestReport`가 `benchmark.passRate.withSkill`을 읽다 런타임 크래시(앱 화이트아웃).
+
+- **프론트 대응(완료)**: `TestReport`를 방어적으로 수정 — 없는 섹션/필드는 건너뛰고 앱이
+  죽지 않게 함. 단, 값이 없으면 그 부분은 화면에 안 나온다(불완전한 리포트로 보임).
+- **백엔드 요청**: `test_report.schema.json`은 `benchmark.passRate/time/aiCost`를 required로
+  정의하지만 LLM tool-call이 이를 항상 채우진 않음. grade_llm 출력의 스키마 검증/재시도
+  (누락 시 다시 요청) 또는 프롬프트 강화로 **완전한 리포트를 보장**해 주세요.

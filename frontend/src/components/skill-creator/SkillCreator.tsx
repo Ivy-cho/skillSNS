@@ -177,7 +177,10 @@ function StepPage({
       inert={!active}
       className="flex h-full shrink-0 basis-[14.2857%] flex-col overflow-y-auto bg-bg"
     >
-      <div className="sticky top-0 z-10 border-b border-border/60 bg-bg px-5 py-2.5 text-center">
+      <div
+        data-sticky-head
+        className="sticky top-0 z-10 border-b border-border/60 bg-bg px-5 py-2.5 text-center"
+      >
         <span className="font-mono text-[0.68rem] uppercase tracking-wide text-muted">
           STEP {meta.step} · {meta.label}
         </span>
@@ -188,7 +191,14 @@ function StepPage({
 }
 
 // 완료되면 사용자 입력 없이 곧장 다음 단계 시작 문구까지 이어 받아오는 stage들.
-const AUTO_CONTINUE_STAGES = new Set(["skill_content", "skill_name"]);
+// skill_test는 진입 즉시 "테스트할 샘플 질문"을 제안받아 step5에 바로 보여주려고 포함.
+const AUTO_CONTINUE_STAGES = new Set(["skill_content", "skill_name", "skill_test"]);
+
+// 이 stage들로 "전환"되며 오는 응답의 메시지는 새 단계 내용이 아니라 직전 단계의 확정
+// 문구다. skill_content/skill_name은 auto-continue가 실제 내용을 이어 받아오고,
+// skill_test(테스트 준비)는 화면 내용이 프론트 버튼("테스트 시작하기")이라 백엔드 메시지가
+// 확정 문구뿐이다. → 확정 문구는 직전 단계 페이지에 남긴다.
+const CONFIRM_ENTRY_STAGES = new Set(["skill_content", "skill_name", "skill_test"]);
 
 export function SkillCreator() {
   const [phase, setPhase] = useState<Phase>("category");
@@ -203,6 +213,8 @@ export function SkillCreator() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [publishedSkill, setPublishedSkill] = useState<PublishedSkill | null>(null);
+  // 테스트 채점 실행 중 여부 — 질문 확정 후 스킬 실행+채점(오래 걸림) 동안 "채점 중" 카드 표시용.
+  const [grading, setGrading] = useState(false);
   // 지금 화면에 보고 있는 페이지. 단계가 끝나 live가 앞서면 우측 하단 플로팅 버튼으로
   // 사용자가 직접 넘기고(자동 슬라이드 안 함), 좌측 하단 버튼으로 이전 단계를 돌아본다.
   const [viewIndex, setViewIndex] = useState(0);
@@ -219,12 +231,28 @@ export function SkillCreator() {
   const liveIndex = PAGE_BY_PHASE[phase];
   const viewingHistory = viewIndex < liveIndex;
 
-  // 보고 있는 페이지의 스크롤 위치: 대화 페이지(0~3)는 최신 대화가 보이게 하단으로,
-  // 테스트/개선/게시(4~6)는 결과의 맨 앞부터 보이게 상단으로.
+  // 보고 있는 페이지의 스크롤 위치 조정.
+  // - 테스트/개선/게시(4~6): 결과의 맨 앞부터 보이게 상단으로.
+  // - 대화 페이지: 기본은 하단(최신 대화). 단, 방금 온 에이전트 답변이 화면보다 길면
+  //   그 말풍선 "시작점"이 보이게 상단 정렬한다 (끝만 보여 앞을 못 읽는 문제 방지).
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTop = viewIndex >= 4 ? 0 : el.scrollHeight;
+    if (viewIndex >= 4) {
+      el.scrollTop = 0;
+      return;
+    }
+    const msgEls = el.querySelectorAll<HTMLElement>("[data-msg-role]");
+    const last = msgEls[msgEls.length - 1];
+    const stickyH = el.querySelector<HTMLElement>("[data-sticky-head]")?.offsetHeight ?? 0;
+    const viewportH = el.clientHeight - stickyH;
+    if (last && last.dataset.msgRole === "agent" && last.offsetHeight > viewportH) {
+      // 화면보다 긴 답변 → 말풍선 시작을 상단(sticky 헤더 바로 아래)에 맞춘다.
+      const delta = last.getBoundingClientRect().top - el.getBoundingClientRect().top - stickyH;
+      el.scrollTop += delta;
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [messages, isTyping, phase, pending, viewIndex]);
 
   function nextId() {
@@ -262,11 +290,13 @@ export function SkillCreator() {
     setSkillInfo(merged);
 
     const newPhase = phaseForStage(res.stage, merged);
-    const enteringAutoStage = stageRef.current !== res.stage && AUTO_CONTINUE_STAGES.has(res.stage);
-    // 자동 진행 단계로 "넘어가는" 응답의 메시지는 직전 단계의 마무리(확정) 문구다
-    // (예: "좋아요, 확정할게요!"). 실제 새 단계 내용은 뒤이어 오는 auto-continue 응답이
-    // 담으므로, 이 확정 문구는 이전 단계 페이지에 남긴다. 그 외에는 방금 들어선 단계로 태깅.
-    const tagPhase = enteringAutoStage ? phaseRef.current : newPhase;
+    const isTransition = stageRef.current !== res.stage;
+    const enteringAutoStage = isTransition && AUTO_CONTINUE_STAGES.has(res.stage);
+    // 단계 확정 후 다음 단계로 "넘어가는" 응답의 메시지는 직전 단계의 마무리(확정) 문구다
+    // (예: "좋아요, 이름 확정됐어요!"). 실제 새 단계 내용은 따로 온다. 그래서 이 확정 문구는
+    // 이전 단계 페이지에 남기고, 그 외에는 방금 들어선 단계로 태깅한다.
+    const tagPhase =
+      isTransition && CONFIRM_ENTRY_STAGES.has(res.stage) ? phaseRef.current : newPhase;
     for (const m of res.messages) pushMessage("agent", m, "text", tagPhase);
     setPending({ choices: res.choices, summary: res.summary });
 
@@ -283,16 +313,24 @@ export function SkillCreator() {
   async function handleSelectCategory(selected: Category) {
     setCategory(selected);
     setError(null);
+    // step1은 백엔드(startDraft, ~수초) 응답을 기다리지 않고 즉시 완료 처리한다.
+    // 말풍선을 남기고 phase를 올려 "다음 단계" 버튼을 바로 띄우고, startDraft는 백그라운드로
+    // 진행한다(그동안 step2에는 타이핑 표시, 입력창은 비활성). 이렇게 해야 선택 직후의
+    // 체감 버퍼가 사라진다.
+    pushMessage("agent", "다음 단계로 넘어가주세요! 👉", "text", "category");
+    advanceTo("topicChat");
     setIsTyping(true);
     try {
       const res = await startDraft(selected.label);
       draftIdRef.current = res.draft_id;
       setDraftId(res.draft_id);
       await applyResponse(res);
-      // 카테고리 단계 마무리를 말풍선으로 남긴다 (상단 완료 바 대신). 1단계에 머물고
-      // live가 앞서므로 우측 하단 "다음 단계" 버튼이 등장한다.
-      pushMessage("agent", "다음 단계로 넘어가주세요! 👉", "text", "category");
     } catch (e) {
+      // 실패 시 낙관적 진행을 되돌려 카테고리 선택 화면으로 복귀.
+      setMessages((prev) => prev.filter((m) => m.phase !== "category"));
+      setCategory(null);
+      phaseRef.current = "category";
+      setPhase("category");
       setError(e instanceof Error ? e.message : "카테고리 선택 중 오류가 발생했어요");
     } finally {
       setIsTyping(false);
@@ -329,6 +367,16 @@ export function SkillCreator() {
       setError(e instanceof Error ? e.message : "파일 첨부 중 오류가 발생했어요");
     } finally {
       setIsTyping(false);
+    }
+  }
+
+  // 질문 확정 → 실제 테스트 실행 + 채점(오래 걸리는 단일 호출). 그동안 "채점 중" 카드를 띄운다.
+  async function handleRunTest() {
+    setGrading(true);
+    try {
+      await handleSend("네, 이 질문들로 테스트해주세요!");
+    } finally {
+      setGrading(false);
     }
   }
 
@@ -487,19 +535,43 @@ export function SkillCreator() {
             {msgsFor("reviewing", "testing").map((m) => (
               <ChatBubble key={m.id} message={m} />
             ))}
-            {phase === "reviewing" && !isTyping && (
-              <div className="rounded-2xl border border-border bg-surface p-4">
-                <div className="rounded-xl bg-success/10 px-4 py-3 text-[0.85rem] leading-relaxed text-success">
-                  🎉 스킬이 완성됐어요! 준비되면 실제로 잘 답하는지 테스트해볼게요.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleSend("네, 테스트 시작해주세요!")}
-                  className="mt-3 w-full rounded-full bg-primary px-3.5 py-2.5 text-[0.85rem] font-semibold text-on-primary transition active:scale-[0.99]"
-                >
-                  테스트 시작하기
-                </button>
-              </div>
+            {phase === "reviewing" && (
+              <>
+                {/* 질문 확정 후 실제 테스트 실행+채점 중 (오래 걸림) — 진행 카드로 안내 */}
+                {grading ? (
+                  <div className="rounded-2xl border border-border bg-surface p-4">
+                    <div className="flex items-center gap-2 text-[0.85rem] font-semibold text-primary-hover">
+                      <span
+                        className="inline-block h-2 w-2 rounded-full bg-primary"
+                        style={{ animation: "dot-ring 1.2s ease-out infinite" }}
+                      />
+                      테스트 채점 중이에요…
+                    </div>
+                    <p className="mt-2 text-[0.8rem] leading-relaxed text-muted">
+                      질문들을 실제 스킬에 돌려보고 baseline과 비교해 점수를 매기는 중이라 조금 걸려요 ⏳
+                    </p>
+                  </div>
+                ) : isTyping ? (
+                  <TypingIndicator />
+                ) : (
+                  /* 진입 즉시 제안된 샘플 질문은 위 말풍선으로 표시됨. 질문이 준비되면 이 카드로
+                     실제 테스트 실행 ("테스트 시작하기"는 여기 한 번만). */
+                  msgsFor("reviewing", "testing").length > 0 && (
+                    <div className="rounded-2xl border border-border bg-surface p-4">
+                      <div className="rounded-xl bg-success/10 px-4 py-3 text-[0.85rem] leading-relaxed text-success">
+                        🎉 이 질문들로 실제 잘 답하는지 테스트해볼게요. 추가할 질문이 있으면 아래 입력창에 적어주세요.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRunTest}
+                        className="mt-3 w-full rounded-full bg-primary px-3.5 py-2.5 text-[0.85rem] font-semibold text-on-primary transition active:scale-[0.99]"
+                      >
+                        테스트 시작하기
+                      </button>
+                    </div>
+                  )
+                )}
+              </>
             )}
             {phase === "testing" && (
               <>

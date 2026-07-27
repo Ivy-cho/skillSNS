@@ -40,7 +40,7 @@ export function ChatBubble({
 
   if (message.kind === "attachment") {
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-end" data-msg-role={message.role}>
         <AttachChip fileName={message.content} />
       </div>
     );
@@ -48,6 +48,7 @@ export function ChatBubble({
 
   return (
     <div
+      data-msg-role={message.role}
       className={`flex items-end gap-2 ${isUser ? "justify-end" : ""}`}
       style={{ animation: "rise 0.35s ease both" }}
     >

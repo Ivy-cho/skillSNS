@@ -1,8 +1,10 @@
-const TOTAL_STEPS = 7; // 1..6 + finish
+const TOTAL_STEPS = 6; // 1..5 + finish
 const FINISH_STEP = TOTAL_STEPS;
 
 // currentStep = 실제로 도달한 최신 단계(live). viewStep = 지금 화면에 보고 있는 단계.
-// 지난 단계를 돌아보는 중이면 viewStep < currentStep 이 되고, 그 노드를 active로 강조한다.
+// "완료(✓)"는 그 단계를 실제로 지나갔을 때(step < currentStep)만 — 다음 단계로 막 넘어가도
+// 아직 안 끝낸 그 단계는 체크되지 않는다. done 판정이 active보다 우선이라, 완료된 단계를
+// 보고 있으면 active 링 대신 ✓로 표시된다.
 export function StepProgress({
   currentStep,
   viewStep,
@@ -21,10 +23,10 @@ export function StepProgress({
             ? currentStep >= FINISH_STEP
               ? "done"
               : "upcoming"
+            : step < currentStep
+            ? "done"
             : step === view
             ? "active"
-            : step <= currentStep
-            ? "done"
             : "upcoming";
 
           return (

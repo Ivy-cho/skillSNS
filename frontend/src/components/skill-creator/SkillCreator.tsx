@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CategoryGrid } from "./CategoryGrid";
 import { ChatBubble } from "./ChatBubble";
 import { TypingIndicator } from "./TypingIndicator";
 import { ChatInputBar } from "./ChatInputBar";
@@ -28,21 +27,11 @@ import {
   type PublishedSkill,
 } from "@/lib/backendClient";
 
+// 카테고리 단계는 제거 — 분야는 "주제 정하기" 대화에서 함께 정한다. draft는 앱 로드 시
+// 자동 시작하며, 백엔드가 요구하는 category 값은 중립 기본값(DEFAULT_CATEGORY)으로 넣는다.
+// (category phase는 자동 시작 로딩 동안의 초기 상태로만 잠깐 존재 — 첫 페이지=주제 정하기)
 const STEP_BY_PHASE: Record<Phase, number> = {
   category: 1,
-  topicChat: 2,
-  interviewing: 3,
-  naming: 4,
-  reviewing: 5,
-  testing: 5,
-  improving: 6,
-  published: 7,
-};
-
-// 각 phase가 어느 슬라이드 페이지(0-based)에 속하는지. reviewing/testing은
-// 같은 5단계라 한 페이지(4)를 공유하고, 그 안에서 phase에 따라 내용만 바뀐다.
-const PAGE_BY_PHASE: Record<Phase, number> = {
-  category: 0,
   topicChat: 1,
   interviewing: 2,
   naming: 3,
@@ -52,19 +41,51 @@ const PAGE_BY_PHASE: Record<Phase, number> = {
   published: 6,
 };
 
-const TOTAL_PAGES = 7;
+// 각 phase가 어느 슬라이드 페이지(0-based)에 속하는지. reviewing/testing은 같은 4단계라
+// 한 페이지(3)를 공유하고, 그 안에서 phase에 따라 내용만 바뀐다.
+const PAGE_BY_PHASE: Record<Phase, number> = {
+  category: 0,
+  topicChat: 0,
+  interviewing: 1,
+  naming: 2,
+  reviewing: 3,
+  testing: 3,
+  improving: 4,
+  published: 5,
+};
+
+const TOTAL_PAGES = 6;
 
 // 페이지별 고정 헤더(눈에 보이는 "STEP N · 라벨"). phase가 아니라 페이지 index 기준이라,
 // 지난 페이지를 돌아볼 때도 그 페이지의 라벨이 그대로 표시된다.
 const PAGE_META: { step: number; label: string }[] = [
-  { step: 1, label: "카테고리 선택하기" },
-  { step: 2, label: "스킬 주제 정하기" },
-  { step: 3, label: "스킬 내용 정하기" },
-  { step: 4, label: "스킬 이름 정하기" },
-  { step: 5, label: "스킬 테스트하기" },
-  { step: 6, label: "스킬 개선하기" },
-  { step: 7, label: "게시" },
+  { step: 1, label: "스킬 주제 정하기" },
+  { step: 2, label: "스킬 내용 정하기" },
+  { step: 3, label: "스킬 이름 정하기" },
+  { step: 4, label: "스킬 테스트하기" },
+  { step: 5, label: "스킬 개선하기" },
+  { step: 6, label: "게시" },
 ];
+
+// 에이전트 정리 문구 안의 "필드: 값" 줄은 요약 카드(SummaryCard / ContentSummaryCard)와
+// 내용이 겹친다. 카드가 보여주는 모든 필드(주제/정의/타겟/이름 + 내용 7항목)를 대상으로,
+// 그 줄만 걸러내고(카드가 대신) 앞뒤 일반 문구는 말풍선으로 남긴다.
+const SUMMARY_LINE_RE =
+  /^\s*(?:[-*•]|\d+\.)?\s*\*{0,2}\s*(상세\s*주제|한\s*줄\s*정의|주제|정의|타겟|이름|절차|규칙|체크리스트|사례|노하우|안전장치|말투)\s*\*{0,2}\s*[:：]/;
+function stripSummaryLines(content: string): string {
+  return content
+    .split("\n")
+    .filter((line) => !SUMMARY_LINE_RE.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// 카테고리 단계를 없앤 뒤 백엔드 create가 요구하는 category 값의 중립 기본값.
+// "여러 분야"로 시작하면 첫 질문이 "평소 어떤 주제로 조언을 구하러 오나요?"처럼 열린 형태로
+// 나와, 분야를 대화에서 자연스럽게 정하게 된다. (실제 카테고리를 대화에서 확정·저장하는 건
+// 백엔드 몫 — BACKEND_HANDOFF.md 참고)
+const DEFAULT_CATEGORY: Category = { id: "general", label: "여러 분야", emoji: "✨" };
 
 // 메시지 입력창을 띄우는 단계 = 에이전트와 대화하는 2·3·5·6단계.
 // (1 카테고리·4 이름·finish는 입력창 없이 선택/버튼으로 진행 — "대화창"처럼 보이지 않게.)
@@ -120,7 +141,6 @@ function mergeSkillInfo(prev: SkillInfo, patch: Record<string, unknown>): SkillI
 // 돌아보기용 페이지 index -> 그 페이지의 대표 phase (revert 대상 판별용).
 function phaseForViewIndex(index: number): Phase {
   const map: Phase[] = [
-    "category",
     "topicChat",
     "interviewing",
     "naming",
@@ -157,6 +177,44 @@ function SummaryCard({ info }: { info: SkillInfo }) {
   );
 }
 
+// 스킬 내용(절차/규칙/…)을 정리해 보여주는 카드 — step3 완료 시 대화 대신 이걸 띄운다.
+const CONTENT_LABELS: [keyof SkillContent, string][] = [
+  ["procedure", "절차"],
+  ["rules", "규칙"],
+  ["checklist", "체크리스트"],
+  ["cases", "사례"],
+  ["knowhow", "노하우"],
+  ["safety", "안전장치"],
+  ["tone", "말투"],
+];
+
+function ContentSummaryCard({ info }: { info: SkillInfo }) {
+  const filled = CONTENT_LABELS.filter(([k]) => (info.content[k] ?? "").trim());
+  if (filled.length === 0 && !info.topic) return null;
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-4">
+      <p className="mb-2 font-mono text-[0.62rem] uppercase tracking-wide text-primary">정리</p>
+      {info.topic && (
+        <div className="text-[0.85rem] text-ink">
+          <span className="font-semibold">주제</span> · {info.topic}
+        </div>
+      )}
+      <div className="mt-2.5 flex flex-col gap-2.5">
+        {filled.map(([k, label]) => (
+          <div key={k}>
+            <div className="font-mono text-[0.66rem] uppercase tracking-wide text-primary">
+              {label}
+            </div>
+            <p className="mt-0.5 whitespace-pre-line text-[0.82rem] leading-relaxed text-ink">
+              {info.content[k]}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // 슬라이드 트랙 안의 한 페이지. active인 페이지에만 scrollRef를 걸어 스크롤을 그 페이지에서
 // 처리하고, 나머지 페이지는 inert로 상호작용/포커스를 막는다.
 // 현재 단계 라벨은 대화창 안 상단에 sticky로 고정 — 스크롤해도 계속 보인다.
@@ -175,7 +233,7 @@ function StepPage({
     <section
       ref={active ? scrollRef : undefined}
       inert={!active}
-      className="flex h-full shrink-0 basis-[14.2857%] flex-col overflow-y-auto bg-bg"
+      className="flex h-full shrink-0 basis-[16.6667%] flex-col overflow-y-auto bg-bg"
     >
       <div
         data-sticky-head
@@ -232,13 +290,13 @@ export function SkillCreator() {
   const viewingHistory = viewIndex < liveIndex;
 
   // 보고 있는 페이지의 스크롤 위치 조정.
-  // - 테스트/개선/게시(4~6): 결과의 맨 앞부터 보이게 상단으로.
+  // - 테스트/개선/게시(페이지 3~5): 결과의 맨 앞부터 보이게 상단으로.
   // - 대화 페이지: 기본은 하단(최신 대화). 단, 방금 온 에이전트 답변이 화면보다 길면
   //   그 말풍선 "시작점"이 보이게 상단 정렬한다 (끝만 보여 앞을 못 읽는 문제 방지).
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (viewIndex >= 4) {
+    if (viewIndex >= 3) {
       el.scrollTop = 0;
       return;
     }
@@ -310,32 +368,28 @@ export function SkillCreator() {
     }
   }
 
-  async function handleSelectCategory(selected: Category) {
-    setCategory(selected);
-    setError(null);
-    // step1은 백엔드(startDraft, ~수초) 응답을 기다리지 않고 즉시 완료 처리한다.
-    // 말풍선을 남기고 phase를 올려 "다음 단계" 버튼을 바로 띄우고, startDraft는 백그라운드로
-    // 진행한다(그동안 step2에는 타이핑 표시, 입력창은 비활성). 이렇게 해야 선택 직후의
-    // 체감 버퍼가 사라진다.
-    pushMessage("agent", "다음 단계로 넘어가주세요! 👉", "text", "category");
-    advanceTo("topicChat");
-    setIsTyping(true);
-    try {
-      const res = await startDraft(selected.label);
-      draftIdRef.current = res.draft_id;
-      setDraftId(res.draft_id);
-      await applyResponse(res);
-    } catch (e) {
-      // 실패 시 낙관적 진행을 되돌려 카테고리 선택 화면으로 복귀.
-      setMessages((prev) => prev.filter((m) => m.phase !== "category"));
-      setCategory(null);
-      phaseRef.current = "category";
-      setPhase("category");
-      setError(e instanceof Error ? e.message : "카테고리 선택 중 오류가 발생했어요");
-    } finally {
-      setIsTyping(false);
-    }
-  }
+  // 앱 로드 시 자동으로 draft를 시작한다 (카테고리 선택 단계 없음). 백엔드가 요구하는
+  // category는 중립 기본값으로 보내고, 실제 분야는 첫 단계(주제 정하기) 대화에서 정해진다.
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    (async () => {
+      setCategory(DEFAULT_CATEGORY);
+      setIsTyping(true);
+      try {
+        const res = await startDraft(DEFAULT_CATEGORY.label);
+        draftIdRef.current = res.draft_id;
+        setDraftId(res.draft_id);
+        await applyResponse(res);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "시작 중 오류가 발생했어요");
+      } finally {
+        setIsTyping(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSend(text: string) {
     if (!draftId) return;
@@ -387,6 +441,8 @@ export function SkillCreator() {
     try {
       const res = await improveDraft(draftId);
       await applyResponse(res);
+      // "개선하기"는 명시적 진행 액션 — 곧장 step6(스킬 개선) 페이지로 이동.
+      setViewIndex(PAGE_BY_PHASE[phaseRef.current]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "개선 시작 중 오류가 발생했어요");
     } finally {
@@ -402,6 +458,8 @@ export function SkillCreator() {
       const skill = await confirmDraft(draftId);
       setPublishedSkill(skill);
       advanceTo("published");
+      // 게시는 마지막 액션 — 곧장 finish 페이지로 이동.
+      setViewIndex(PAGE_BY_PHASE.published);
     } catch (e) {
       setError(e instanceof Error ? e.message : "게시 중 오류가 발생했어요");
     } finally {
@@ -444,8 +502,20 @@ export function SkillCreator() {
   const msgsFor = (...phases: Phase[]) =>
     messages.filter((m) => m.phase != null && phases.includes(m.phase));
 
+  // 수집 단계의 대화 렌더 — 에이전트 말풍선에서 "주제/정의/타겟/이름: 값" 줄은 요약 카드와
+  // 겹치므로 걸러내고, 남은 문구만 말풍선으로. 걸러낸 뒤 빈 메시지는 아예 안 그린다.
+  const renderChat = (...phases: Phase[]) =>
+    msgsFor(...phases).map((m) => {
+      if (m.role !== "agent") return <ChatBubble key={m.id} message={m} />;
+      const stripped = stripSummaryLines(m.content);
+      if (!stripped) return null;
+      return <ChatBubble key={m.id} message={{ ...m, content: stripped }} />;
+    });
+
   // 입력창은 대화 단계에서, 그리고 지금 live 페이지를 보고 있을 때만.
-  const showInput = !viewingHistory && CHAT_INPUT_PHASES.has(phase);
+  // 입력창은 현재 진행 중인(live) 단계가 대화 단계면 항상 유지한다 — 요약이 나와 다음
+  // 단계로 넘어갈 수 있게 돼도 입력창이 사라지지 않게. (지난 단계를 돌아보는 중이어도 유지)
+  const showInput = CHAT_INPUT_PHASES.has(phase);
   const canGoBack = viewIndex > 0;
   const canGoForward = liveIndex > viewIndex;
   const editablePhase = phaseForViewIndex(viewIndex);
@@ -464,77 +534,50 @@ export function SkillCreator() {
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
-          className="flex h-full w-[700%] transition-transform duration-500 ease-out motion-reduce:transition-none"
+          className="flex h-full w-[600%] transition-transform duration-500 ease-out motion-reduce:transition-none"
           style={{ transform: `translateX(-${viewIndex * (100 / TOTAL_PAGES)}%)` }}
         >
-          {/* 0 · 카테고리 선택 */}
+          {/* 0 · 스킬 주제 정하기 — 대화는 그대로 두고, 요약이 나오면(단계 완료) 카드를 덧붙인다 */}
           <StepPage meta={PAGE_META[0]} active={viewIndex === 0} scrollRef={scrollRef}>
-            {category ? (
-              <div className="flex justify-center">
-                <div className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-outline-strong bg-surface px-3.5 py-1.5 text-[0.82rem] text-ink">
-                  <span className="text-base">{category.emoji}</span>
-                  {category.label}
-                </div>
-              </div>
-            ) : (
-              <CategoryGrid onSelect={handleSelectCategory} />
-            )}
-            {msgsFor("category").map((m) => (
-              <ChatBubble key={m.id} message={m} />
-            ))}
-          </StepPage>
-
-          {/* 1 · 상세 주제 정하기 */}
-          <StepPage meta={PAGE_META[1]} active={viewIndex === 1} scrollRef={scrollRef}>
-            {msgsFor("topicChat").map((m) => (
-              <ChatBubble key={m.id} message={m} />
-            ))}
-            {isTyping && liveOn(1) && <TypingIndicator />}
+            {renderChat("topicChat")}
+            {isTyping && liveOn(0) && <TypingIndicator />}
             {phase === "topicChat" && !isTyping && pending.choices && pending.choices.length > 0 && (
               <CandidatePicker candidates={pending.choices} onPick={handleSend} />
             )}
-            {phase === "topicChat" && !isTyping && pending.summary && (
-              <>
-                <SummaryCard info={skillInfo} />
-                <SummaryButtons onSend={handleSend} />
-              </>
-            )}
+            {liveIndex > 0 && <SummaryCard info={skillInfo} />}
           </StepPage>
 
-          {/* 2 · 스킬 내용 채우기 */}
-          <StepPage meta={PAGE_META[2]} active={viewIndex === 2} scrollRef={scrollRef}>
-            {msgsFor("interviewing").map((m) => (
-              <ChatBubble key={m.id} message={m} />
-            ))}
-            {isTyping && liveOn(2) && <TypingIndicator />}
+          {/* 1 · 스킬 내용 정하기 — 대화 유지 + 완료되면 내용 정리 카드 덧붙임 */}
+          <StepPage meta={PAGE_META[1]} active={viewIndex === 1} scrollRef={scrollRef}>
+            {renderChat("interviewing")}
+            {isTyping && liveOn(1) && <TypingIndicator />}
             {phase === "interviewing" && !isTyping && pending.choices && pending.choices.length > 0 && (
               <CandidatePicker candidates={pending.choices} onPick={handleSend} />
             )}
-            {phase === "interviewing" && !isTyping && pending.summary && (
+            {liveIndex > 1 && <ContentSummaryCard info={skillInfo} />}
+          </StepPage>
+
+          {/* 2 · 스킬 이름 정하기 — 대화 유지 + 확정 요약 카드 */}
+          <StepPage meta={PAGE_META[2]} active={viewIndex === 2} scrollRef={scrollRef}>
+            {renderChat("naming")}
+            {isTyping && liveOn(2) && <TypingIndicator />}
+            {/* 후보 칩(선택) — 직접 입력은 하단 입력창으로 */}
+            {phase === "naming" && !isTyping && pending.choices && pending.choices.length > 0 && (
+              <CandidatePicker candidates={pending.choices} onPick={handleSend} />
+            )}
+            {/* 이름 확정 순간 요약 카드 + 확인 버튼 */}
+            {phase === "naming" && !isTyping && pending.summary && (
               <>
                 <SummaryCard info={skillInfo} />
                 <SummaryButtons onSend={handleSend} />
               </>
             )}
+            {/* 단계 완료 후 요약 카드 (넘어간 뒤 돌아봐도) */}
+            {liveIndex > 2 && <SummaryCard info={skillInfo} />}
           </StepPage>
 
-          {/* 3 · 이름 정하기 */}
+          {/* 3 · 테스트 (준비 → 결과). 채점 기준(질문 목록)은 화면에 안 보여주고 바로 결과로. */}
           <StepPage meta={PAGE_META[3]} active={viewIndex === 3} scrollRef={scrollRef}>
-            {msgsFor("naming").map((m) => (
-              <ChatBubble key={m.id} message={m} />
-            ))}
-            {isTyping && liveOn(3) && <TypingIndicator />}
-            {/* 후보 칩(선택) — 직접 입력은 하단 입력창으로. 별도 입력칸 중복 제거. */}
-            {phase === "naming" && !isTyping && pending.choices && pending.choices.length > 0 && (
-              <CandidatePicker candidates={pending.choices} onPick={handleSend} />
-            )}
-          </StepPage>
-
-          {/* 4 · 테스트 (준비 → 결과) */}
-          <StepPage meta={PAGE_META[4]} active={viewIndex === 4} scrollRef={scrollRef}>
-            {msgsFor("reviewing", "testing").map((m) => (
-              <ChatBubble key={m.id} message={m} />
-            ))}
             {phase === "reviewing" && (
               <>
                 {/* 질문 확정 후 실제 테스트 실행+채점 중 (오래 걸림) — 진행 카드로 안내 */}
@@ -559,14 +602,14 @@ export function SkillCreator() {
                   msgsFor("reviewing", "testing").length > 0 && (
                     <div className="rounded-2xl border border-border bg-surface p-4">
                       <div className="rounded-xl bg-success/10 px-4 py-3 text-[0.85rem] leading-relaxed text-success">
-                        🎉 이 질문들로 실제 잘 답하는지 테스트해볼게요. 추가할 질문이 있으면 아래 입력창에 적어주세요.
+                        🎉 준비됐어요! 실제로 잘 답하는지 테스트해볼게요.
                       </div>
                       <button
                         type="button"
                         onClick={handleRunTest}
                         className="mt-3 w-full rounded-full bg-primary px-3.5 py-2.5 text-[0.85rem] font-semibold text-on-primary transition active:scale-[0.99]"
                       >
-                        테스트 시작하기
+                        테스트하기
                       </button>
                     </div>
                   )
@@ -600,31 +643,33 @@ export function SkillCreator() {
             )}
           </StepPage>
 
-          {/* 5 · 스킬 개선 */}
-          <StepPage meta={PAGE_META[5]} active={viewIndex === 5} scrollRef={scrollRef}>
+          {/* 4 · 스킬 개선하기 — 대화로 개선(어디부터 손볼까요?) → 개선된 md 미리보기 → 게시 */}
+          <StepPage meta={PAGE_META[4]} active={viewIndex === 4} scrollRef={scrollRef}>
             {msgsFor("improving").map((m) => (
               <ChatBubble key={m.id} message={m} />
             ))}
             {phase === "improving" && (
               <>
-                <SkillPreview info={skillInfo} />
-                {testReport && <TestReportView report={testReport} />}
                 {isTyping && <TypingIndicator />}
                 {!isTyping && (
-                  <button
-                    type="button"
-                    onClick={handlePublish}
-                    className="w-full rounded-full bg-primary px-3.5 py-2.5 text-[0.85rem] font-semibold text-on-primary transition active:scale-[0.99]"
-                  >
-                    완료하고 게시하기
-                  </button>
+                  <>
+                    {/* 개선을 반영한 현재 스킬 md */}
+                    <SkillPreview info={skillInfo} />
+                    <button
+                      type="button"
+                      onClick={handlePublish}
+                      className="w-full rounded-full bg-primary px-3.5 py-2.5 text-[0.85rem] font-semibold text-on-primary transition active:scale-[0.99]"
+                    >
+                      완료하고 게시하기
+                    </button>
+                  </>
                 )}
               </>
             )}
           </StepPage>
 
-          {/* 6 · 게시 (finish) */}
-          <StepPage meta={PAGE_META[6]} active={viewIndex === 6} scrollRef={scrollRef}>
+          {/* 5 · 게시 (finish) */}
+          <StepPage meta={PAGE_META[5]} active={viewIndex === 5} scrollRef={scrollRef}>
             {phase === "published" && (publishedSkill?.title ?? skillName) && (
               <PackagedResult
                 info={skillInfo}

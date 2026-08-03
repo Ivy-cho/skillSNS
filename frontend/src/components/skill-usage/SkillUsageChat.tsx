@@ -6,6 +6,8 @@ import { TypingIndicator } from "../skill-creator/TypingIndicator";
 import { ChatInputBar } from "../skill-creator/ChatInputBar";
 import { CATEGORIES, type ChatMessage } from "../skill-creator/types";
 import { getSkill, startChat, continueChat, type SkillDetail } from "@/lib/backendClient";
+import { BackButton } from "@/components/nav/BackButton";
+import { ScrapButton } from "./ScrapButton";
 
 function emojiForCategory(category: string): string {
   return CATEGORIES.find((c) => c.label === category)?.emoji ?? "🤖";
@@ -75,8 +77,9 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
   const emoji = skill ? emojiForCategory(skill.category) : "🤖";
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface sm:h-[720px] sm:max-w-[390px] sm:rounded-[20px] sm:border sm:border-border sm:shadow-md">
-      <header className="flex items-center gap-2.5 border-b border-border px-5 py-4">
+    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface sm:h-[720px] sm:max-w-[390px] sm:rounded-[20px] sm:border sm:border-border sm:shadow-md">
+      <header className="flex items-center gap-2 border-b border-border px-3 py-4">
+        <BackButton />
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-sm">
           {emoji}
         </div>
@@ -85,6 +88,7 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
             {skill?.title ?? "스킬 불러오는 중…"}
           </div>
         </div>
+        {skill && <ScrapButton skillId={skill.id} />}
       </header>
 
       <div

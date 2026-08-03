@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { getCurrentUserId, getStoredUser, logout } from "@/lib/authClient";
 import { listSkills, type PublishedSkill } from "@/lib/backendClient";
 import { CATEGORIES } from "@/components/skill-creator/types";
+import { ScrapTab } from "@/components/home/ScrapTab";
+import { getEmptyScraps, getScrapsSnapshot, subscribeScraps } from "@/lib/scrapStore";
 
 // 스킬 만들기 화면
 const CREATE_HREF = "/create";
@@ -27,6 +29,7 @@ export default function HomePage() {
   const [tab, setTab] = useState<Tab>("mine");
   const [skills, setSkills] = useState<PublishedSkill[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const scraps = useSyncExternalStore(subscribeScraps, getScrapsSnapshot, getEmptyScraps);
 
   const user = getStoredUser();
   const nickname = user?.nickname ?? "나";
@@ -92,7 +95,7 @@ export default function HomePage() {
         {(
           [
             { key: "mine", label: `내 스킬 ${mineCount}` },
-            { key: "scrap", label: "스크랩" },
+            { key: "scrap", label: `스크랩 ${scraps.length || ""}`.trim() },
           ] as { key: Tab; label: string }[]
         ).map(({ key, label }) => (
           <button
@@ -169,16 +172,7 @@ export default function HomePage() {
             )}
           </div>
         ) : (
-          // 스크랩/폴더는 백엔드에 아직 기능이 없어 빈 상태로 둔다. (BACKEND_HANDOFF.md)
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <span className="text-2xl">📁</span>
-            <p className="text-[0.85rem] font-semibold text-ink">아직 스크랩한 스킬이 없어요</p>
-            <p className="text-[0.78rem] leading-relaxed text-muted">
-              마음에 드는 스킬을 폴더에 모아둘 수 있어요
-              <br />
-              (준비 중)
-            </p>
-          </div>
+          <ScrapTab />
         )}
       </div>
     </div>

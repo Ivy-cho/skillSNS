@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AuthGate } from "@/components/auth/AuthGate";
+import { BackButton } from "@/components/nav/BackButton";
 import {
   getAccessToken,
   getStoredUser,
@@ -104,22 +105,24 @@ export default function ProfileEditPage() {
     <main className="flex min-h-0 flex-1 flex-col sm:items-center sm:justify-center sm:p-6">
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface sm:h-[720px] sm:max-w-[390px] sm:rounded-[20px] sm:border sm:border-border sm:shadow-md">
         {/* 상단 바 */}
-        <header className="flex items-center justify-between border-b border-border px-4 py-3">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="text-[0.85rem] text-muted transition active:scale-95 motion-reduce:transition-none"
-          >
-            취소
-          </button>
+        <header className="flex items-center justify-between border-b border-border px-3 py-3">
+          <BackButton fallback="/home" />
           <span className="text-[0.9rem] font-bold text-ink">프로필 편집</span>
           <button
             type="button"
             onClick={handleSave}
             disabled={!canSave}
-            className="text-[0.85rem] font-semibold text-primary transition active:scale-95 disabled:opacity-40 motion-reduce:transition-none"
+            aria-label="저장"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-bold text-primary transition hover:bg-surface-2 active:scale-95 disabled:opacity-40 motion-reduce:transition-none"
           >
-            {saving ? "저장 중…" : "저장"}
+            {saving ? (
+              <span
+                className="inline-block h-2 w-2 rounded-full bg-primary"
+                style={{ animation: "dot-ring 1.2s ease-out infinite" }}
+              />
+            ) : (
+              "✓"
+            )}
           </button>
         </header>
 

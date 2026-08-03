@@ -8,6 +8,7 @@ import { PackagedResult } from "./PackagedResult";
 import { AttachModal } from "./AttachModal";
 import { CandidatePicker } from "./CandidatePicker";
 import { StepProgress } from "./StepProgress";
+import { BackButton } from "@/components/nav/BackButton";
 import { SkillPreview } from "./SkillPreview";
 import { TestReport as TestReportView } from "./TestReport";
 import {
@@ -535,7 +536,8 @@ export function SkillCreator() {
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface sm:h-[720px] sm:max-w-[390px] sm:rounded-[20px] sm:border sm:border-border sm:shadow-md">
       <header className="border-b border-border">
-        <div className="flex items-center gap-2.5 px-5 pt-4">
+        <div className="flex items-center gap-2 px-3 pt-4">
+          <BackButton />
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-sm">🤖</div>
           <div className="text-[0.95rem] font-bold">스킬 크리에이터</div>
         </div>

@@ -67,15 +67,19 @@ const PAGE_META: { step: number; label: string }[] = [
   { step: 6, label: "게시" },
 ];
 
-// 에이전트 정리 문구 안의 "필드: 값" 줄은 요약 카드(SummaryCard / ContentSummaryCard)와
-// 내용이 겹친다. 카드가 보여주는 모든 필드(주제/정의/타겟/이름 + 내용 7항목)를 대상으로,
-// 그 줄만 걸러내고(카드가 대신) 앞뒤 일반 문구는 말풍선으로 남긴다.
+// 에이전트 정리 문구 정리:
+// - 마크다운 구분선(--- / *** / ___) 줄은 말풍선에서 항상 제거 (그냥 텍스트로 보여 지저분).
+// - "필드: 값" 줄(주제/정의/타겟/이름 + 내용 7항목)은 요약 카드와 겹치므로, 카드가 실제로
+//   뜰 때(stripFields=true)만 제거한다. 카드가 아직 없으면 필드를 남겨야 내용이 안 사라진다.
 const SUMMARY_LINE_RE =
   /^\s*(?:[-*•]|\d+\.)?\s*\*{0,2}\s*(상세\s*주제|한\s*줄\s*정의|주제|정의|타겟|이름|절차|규칙|체크리스트|사례|노하우|안전장치|말투)\s*\*{0,2}\s*[:：]/;
-function stripSummaryLines(content: string): string {
+const HR_LINE_RE = /^\s*[-*_]{3,}\s*$/;
+function cleanAgentText(content: string, stripFields: boolean): string {
   return content
     .split("\n")
-    .filter((line) => !SUMMARY_LINE_RE.test(line))
+    .filter(
+      (line) => !HR_LINE_RE.test(line) && !(stripFields && SUMMARY_LINE_RE.test(line))
+    )
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -273,6 +277,8 @@ export function SkillCreator() {
   const [publishedSkill, setPublishedSkill] = useState<PublishedSkill | null>(null);
   // 테스트 채점 실행 중 여부 — 질문 확정 후 스킬 실행+채점(오래 걸림) 동안 "채점 중" 카드 표시용.
   const [grading, setGrading] = useState(false);
+  // 개선 단계에서 "개선 완료"를 눌렀는지 — true면 대화 대신 최종본 md + 게시 버튼만 보여준다.
+  const [improveDone, setImproveDone] = useState(false);
   // 지금 화면에 보고 있는 페이지. 단계가 끝나 live가 앞서면 우측 하단 플로팅 버튼으로
   // 사용자가 직접 넘기고(자동 슬라이드 안 함), 좌측 하단 버튼으로 이전 단계를 돌아본다.
   const [viewIndex, setViewIndex] = useState(0);
@@ -289,29 +295,33 @@ export function SkillCreator() {
   const liveIndex = PAGE_BY_PHASE[phase];
   const viewingHistory = viewIndex < liveIndex;
 
-  // 보고 있는 페이지의 스크롤 위치 조정.
-  // - 테스트/개선/게시(페이지 3~5): 결과의 맨 앞부터 보이게 상단으로.
-  // - 대화 페이지: 기본은 하단(최신 대화). 단, 방금 온 에이전트 답변이 화면보다 길면
-  //   그 말풍선 "시작점"이 보이게 상단 정렬한다 (끝만 보여 앞을 못 읽는 문제 방지).
+  // 보고 있는 페이지의 스크롤 위치 조정 (모든 단계 공통). requestAnimationFrame으로 레이아웃이
+  // 끝난 뒤 측정해야 높이가 정확하다.
+  // - 방금 온 에이전트 답변이 화면보다 길면, 그 말풍선 "맨 앞 문장"이 보이게 상단(sticky 헤더
+  //   바로 아래)에 맞춘다. 짧으면 하단(최신 대화).
+  // - 대화가 없는 결과 페이지(테스트/게시)는 맨 앞부터 상단으로.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (viewIndex >= 3) {
-      el.scrollTop = 0;
-      return;
-    }
-    const msgEls = el.querySelectorAll<HTMLElement>("[data-msg-role]");
-    const last = msgEls[msgEls.length - 1];
-    const stickyH = el.querySelector<HTMLElement>("[data-sticky-head]")?.offsetHeight ?? 0;
-    const viewportH = el.clientHeight - stickyH;
-    if (last && last.dataset.msgRole === "agent" && last.offsetHeight > viewportH) {
-      // 화면보다 긴 답변 → 말풍선 시작을 상단(sticky 헤더 바로 아래)에 맞춘다.
-      const delta = last.getBoundingClientRect().top - el.getBoundingClientRect().top - stickyH;
-      el.scrollTop += delta;
-    } else {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [messages, isTyping, phase, pending, viewIndex]);
+    // 이 페이지에 완료 요약 카드가 떠 있으면(수집 단계 0~2가 끝난 상태) 마지막 정리 문구부터
+    // 읽히게 무조건 상단 정렬한다.
+    const summaryCardOnPage = viewIndex <= 2 && liveIndex > viewIndex;
+    const raf = requestAnimationFrame(() => {
+      const stickyH = el.querySelector<HTMLElement>("[data-sticky-head]")?.offsetHeight ?? 0;
+      const msgEls = el.querySelectorAll<HTMLElement>("[data-msg-role]");
+      const last = msgEls[msgEls.length - 1];
+      const viewportH = el.clientHeight - stickyH;
+      if (last && last.dataset.msgRole === "agent" && (summaryCardOnPage || last.offsetHeight > viewportH)) {
+        const delta = last.getBoundingClientRect().top - el.getBoundingClientRect().top - stickyH;
+        el.scrollTop += delta;
+      } else if (!last && viewIndex >= 3) {
+        el.scrollTop = 0;
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [messages, isTyping, phase, pending, viewIndex, liveIndex]);
 
   function nextId() {
     idRef.current += 1;
@@ -502,20 +512,20 @@ export function SkillCreator() {
   const msgsFor = (...phases: Phase[]) =>
     messages.filter((m) => m.phase != null && phases.includes(m.phase));
 
-  // 수집 단계의 대화 렌더 — 에이전트 말풍선에서 "주제/정의/타겟/이름: 값" 줄은 요약 카드와
-  // 겹치므로 걸러내고, 남은 문구만 말풍선으로. 걸러낸 뒤 빈 메시지는 아예 안 그린다.
-  const renderChat = (...phases: Phase[]) =>
+  // 수집 단계의 대화 렌더. stripFields=true(요약 카드가 뜬 상태)면 카드와 겹치는 "필드:값"
+  // 줄을 말풍선에서 걸러낸다. 구분선(---)은 항상 제거. 걸러낸 뒤 빈 메시지는 안 그린다.
+  const renderChat = (stripFields: boolean, ...phases: Phase[]) =>
     msgsFor(...phases).map((m) => {
       if (m.role !== "agent") return <ChatBubble key={m.id} message={m} />;
-      const stripped = stripSummaryLines(m.content);
-      if (!stripped) return null;
-      return <ChatBubble key={m.id} message={{ ...m, content: stripped }} />;
+      const cleaned = cleanAgentText(m.content, stripFields);
+      if (!cleaned) return null;
+      return <ChatBubble key={m.id} message={{ ...m, content: cleaned }} />;
     });
 
   // 입력창은 대화 단계에서, 그리고 지금 live 페이지를 보고 있을 때만.
   // 입력창은 현재 진행 중인(live) 단계가 대화 단계면 항상 유지한다 — 요약이 나와 다음
   // 단계로 넘어갈 수 있게 돼도 입력창이 사라지지 않게. (지난 단계를 돌아보는 중이어도 유지)
-  const showInput = CHAT_INPUT_PHASES.has(phase);
+  const showInput = CHAT_INPUT_PHASES.has(phase) && !(phase === "improving" && improveDone);
   const canGoBack = viewIndex > 0;
   const canGoForward = liveIndex > viewIndex;
   const editablePhase = phaseForViewIndex(viewIndex);
@@ -539,7 +549,7 @@ export function SkillCreator() {
         >
           {/* 0 · 스킬 주제 정하기 — 대화는 그대로 두고, 요약이 나오면(단계 완료) 카드를 덧붙인다 */}
           <StepPage meta={PAGE_META[0]} active={viewIndex === 0} scrollRef={scrollRef}>
-            {renderChat("topicChat")}
+            {renderChat(liveIndex > 0, "topicChat")}
             {isTyping && liveOn(0) && <TypingIndicator />}
             {phase === "topicChat" && !isTyping && pending.choices && pending.choices.length > 0 && (
               <CandidatePicker candidates={pending.choices} onPick={handleSend} />
@@ -549,7 +559,7 @@ export function SkillCreator() {
 
           {/* 1 · 스킬 내용 정하기 — 대화 유지 + 완료되면 내용 정리 카드 덧붙임 */}
           <StepPage meta={PAGE_META[1]} active={viewIndex === 1} scrollRef={scrollRef}>
-            {renderChat("interviewing")}
+            {renderChat(liveIndex > 1, "interviewing")}
             {isTyping && liveOn(1) && <TypingIndicator />}
             {phase === "interviewing" && !isTyping && pending.choices && pending.choices.length > 0 && (
               <CandidatePicker candidates={pending.choices} onPick={handleSend} />
@@ -559,7 +569,7 @@ export function SkillCreator() {
 
           {/* 2 · 스킬 이름 정하기 — 대화 유지 + 확정 요약 카드 */}
           <StepPage meta={PAGE_META[2]} active={viewIndex === 2} scrollRef={scrollRef}>
-            {renderChat("naming")}
+            {renderChat(liveIndex > 2, "naming")}
             {isTyping && liveOn(2) && <TypingIndicator />}
             {/* 후보 칩(선택) — 직접 입력은 하단 입력창으로 */}
             {phase === "naming" && !isTyping && pending.choices && pending.choices.length > 0 && (
@@ -643,26 +653,46 @@ export function SkillCreator() {
             )}
           </StepPage>
 
-          {/* 4 · 스킬 개선하기 — 대화로 개선(어디부터 손볼까요?) → 개선된 md 미리보기 → 게시 */}
+          {/* 4 · 스킬 개선하기 — 개선 평가(카드) + 어디부터 손볼까요?(대화) → 개선 완료 시 최종본 → 게시 */}
           <StepPage meta={PAGE_META[4]} active={viewIndex === 4} scrollRef={scrollRef}>
-            {msgsFor("improving").map((m) => (
-              <ChatBubble key={m.id} message={m} />
-            ))}
-            {phase === "improving" && (
+            {phase === "improving" && improveDone ? (
               <>
-                {isTyping && <TypingIndicator />}
-                {!isTyping && (
-                  <>
-                    {/* 개선을 반영한 현재 스킬 md */}
-                    <SkillPreview info={skillInfo} />
-                    <button
-                      type="button"
-                      onClick={handlePublish}
-                      className="w-full rounded-full bg-primary px-3.5 py-2.5 text-[0.85rem] font-semibold text-on-primary transition active:scale-[0.99]"
-                    >
-                      완료하고 게시하기
-                    </button>
-                  </>
+                {/* 개선 완료 — 최종본 md만 보여주고 게시 */}
+                <SkillPreview info={skillInfo} />
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePublish}
+                    className="w-full rounded-full bg-primary px-3.5 py-2.5 text-[0.85rem] font-semibold text-on-primary transition active:scale-[0.99]"
+                  >
+                    스킬 게시하기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImproveDone(false)}
+                    className="w-full rounded-full border border-border px-3.5 py-2.5 text-[0.85rem] font-semibold text-ink transition active:scale-[0.99]"
+                  >
+                    ← 더 손보기
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* 개선 평가 — 테스트 진단을 카드로 */}
+                {testReport && <TestReportView report={testReport} />}
+                {/* 어디부터 손볼까요? + 개선 대화 (하단 입력창으로 답) */}
+                {msgsFor("improving").map((m) => (
+                  <ChatBubble key={m.id} message={m} />
+                ))}
+                {phase === "improving" && isTyping && <TypingIndicator />}
+                {phase === "improving" && !isTyping && (
+                  <button
+                    type="button"
+                    onClick={() => setImproveDone(true)}
+                    className="w-full rounded-full bg-primary px-3.5 py-2.5 text-[0.85rem] font-semibold text-on-primary transition active:scale-[0.99]"
+                  >
+                    개선 완료 · 최종본 보기
+                  </button>
                 )}
               </>
             )}
@@ -674,7 +704,6 @@ export function SkillCreator() {
               <PackagedResult
                 info={skillInfo}
                 version={version}
-                categoryEmoji={category?.emoji ?? "🤖"}
                 attachments={attachments}
                 slug={slug}
               />

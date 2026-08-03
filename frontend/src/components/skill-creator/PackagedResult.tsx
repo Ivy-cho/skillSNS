@@ -30,13 +30,11 @@ async function buildZip(info: SkillInfo, version: string, attachments: File[]): 
 export function PackagedResult({
   info,
   version,
-  categoryEmoji,
   attachments,
   slug,
 }: {
   info: SkillInfo;
   version: string;
-  categoryEmoji: string;
   attachments: File[];
   slug: string;
 }) {
@@ -60,9 +58,7 @@ export function PackagedResult({
   return (
     <div className="rounded-2xl border border-border bg-surface p-4">
       <div className="flex items-center gap-1.5 text-[0.9rem] font-bold">🎁 {info.name}</div>
-      <div className="mt-1 font-mono text-[0.72rem] text-muted">
-        {version} · 게시 완료 · {info.category}
-      </div>
+      <div className="mt-1 font-mono text-[0.72rem] text-muted">{version} · 게시 완료</div>
 
       <div className="mt-3 rounded-xl bg-success/10 px-4 py-3 text-[0.85rem] text-success">
         🎉 스킬을 게시했어요! 패키지(zip)로 저장하거나 바로 사용해볼 수 있어요.
@@ -82,10 +78,6 @@ export function PackagedResult({
         >
           💬 내 스킬 사용해보기 →
         </Link>
-      </div>
-
-      <div className="mt-2 text-center text-[0.72rem] text-muted">
-        {categoryEmoji} {info.category}
       </div>
     </div>
   );

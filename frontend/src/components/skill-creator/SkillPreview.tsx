@@ -28,10 +28,6 @@ export function SkillPreview({ info }: { info: SkillInfo }) {
         <div className="text-[0.95rem] font-bold text-ink">{info.name}</div>
         <div className="mt-2 flex flex-col gap-1 text-[0.8rem] text-muted">
           <div>
-            <span className="font-semibold text-ink">카테고리</span> ·{" "}
-            {info.category}
-          </div>
-          <div>
             <span className="font-semibold text-ink">주제</span> · {info.topic}
           </div>
           <div>

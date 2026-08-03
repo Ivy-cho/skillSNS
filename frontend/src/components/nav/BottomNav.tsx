@@ -81,11 +81,18 @@ export function BottomNav() {
             // 라벨 텍스트를 화면에 노출하지 않으므로(아이콘 전용) 이름은 aria-label로 준다.
             aria-label={label}
             aria-current={active ? "page" : undefined}
-            className={`flex flex-1 items-center justify-center py-3.5 transition-transform active:scale-[0.97] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+            className={`flex flex-1 items-center justify-center py-2.5 transition-transform active:scale-[0.97] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
               active ? "text-primary" : "text-muted"
             }`}
           >
-            <Icon />
+            {/* 활성 탭은 아이콘 뒤에 옅은 알약 배경을 둬서 색만으로 구분하지 않게 한다. */}
+            <span
+              className={`flex items-center justify-center rounded-full px-5 py-1.5 transition-colors motion-reduce:transition-none ${
+                active ? "bg-primary-tint" : "bg-transparent"
+              }`}
+            >
+              <Icon />
+            </span>
           </Link>
         );
       })}

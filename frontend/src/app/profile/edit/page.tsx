@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AuthGate } from "@/components/auth/AuthGate";
 import {
   getAccessToken,
   getStoredUser,
@@ -99,6 +100,7 @@ export default function ProfileEditPage() {
   const canSave = nickname.trim().length > 0 && !nicknameTooLong && !bioTooLong && !saving;
 
   return (
+    <AuthGate>
     <main className="flex min-h-0 flex-1 flex-col sm:items-center sm:justify-center sm:p-6">
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface sm:h-[720px] sm:max-w-[390px] sm:rounded-[20px] sm:border sm:border-border sm:shadow-md">
         {/* 상단 바 */}
@@ -211,5 +213,6 @@ export default function ProfileEditPage() {
         </div>
       </div>
     </main>
+    </AuthGate>
   );
 }

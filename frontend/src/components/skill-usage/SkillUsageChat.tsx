@@ -38,7 +38,7 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
         setSkill(detail);
         pushMessage(
           "agent",
-          `안녕하세요! 저는 "${detail.title}" 스킬이에요. ${detail.category} 관련해서 무엇을 도와드릴까요?`
+          `안녕하세요! 저는 "${detail.title}" 스킬이에요. 무엇을 도와드릴까요?`
         );
       })
       .catch((e) => {
@@ -80,9 +80,10 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-sm">
           {emoji}
         </div>
-        <div className="flex-1">
-          <div className="text-[0.95rem] font-bold">{skill?.title ?? "스킬 불러오는 중…"}</div>
-          <div className="text-[0.75rem] text-muted">{skill?.category ?? ""}</div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[0.95rem] font-bold">
+            {skill?.title ?? "스킬 불러오는 중…"}
+          </div>
         </div>
       </header>
 

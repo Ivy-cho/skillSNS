@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getCurrentUserId, getStoredUser } from "@/lib/authClient";
+import { getCurrentUserId, getStoredUser, logout } from "@/lib/authClient";
 import { listSkills, type PublishedSkill } from "@/lib/backendClient";
 import { CATEGORIES } from "@/components/skill-creator/types";
 
-// 스킬 생성 화면 (현재 앱 루트가 스킬 크리에이터)
-const CREATE_HREF = "/";
+// 스킬 만들기 화면
+const CREATE_HREF = "/create";
 
 function emojiFor(category: string) {
   return CATEGORIES.find((c) => c.label === category)?.emoji ?? "🍅";
@@ -22,6 +23,7 @@ function formatDate(iso: string) {
 type Tab = "mine" | "scrap";
 
 export default function HomePage() {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("mine");
   const [skills, setSkills] = useState<PublishedSkill[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,12 +67,24 @@ export default function HomePage() {
           </div>
         </div>
 
-        <Link
-          href="/profile/edit"
-          className="mt-3.5 flex h-[38px] w-full items-center justify-center gap-1.5 rounded-full border border-border bg-surface text-[0.8rem] font-semibold text-ink transition active:scale-[0.98] motion-reduce:transition-none"
-        >
-          ✎ 프로필 편집
-        </Link>
+        <div className="mt-3.5 flex gap-2">
+          <Link
+            href="/profile/edit"
+            className="flex h-[38px] flex-1 items-center justify-center gap-1.5 rounded-full border border-border bg-surface text-[0.8rem] font-semibold text-ink transition active:scale-[0.98] motion-reduce:transition-none"
+          >
+            ✎ 프로필 편집
+          </Link>
+          <button
+            type="button"
+            onClick={async () => {
+              await logout();
+              router.replace("/login");
+            }}
+            className="flex h-[38px] shrink-0 items-center justify-center rounded-full border border-border bg-surface px-4 text-[0.8rem] font-semibold text-muted transition active:scale-[0.98] motion-reduce:transition-none"
+          >
+            로그아웃
+          </button>
+        </div>
       </div>
 
       {/* 탭 */}

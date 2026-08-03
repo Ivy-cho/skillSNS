@@ -117,6 +117,12 @@ export function getSkill(skillId: string) {
   return getJSON<SkillDetail>(`/skills/${skillId}`);
 }
 
+// 내가 만든 스킬 목록 (홈 화면). user_id를 주면 그 사람 것만 온다.
+export function listSkills(userId?: string) {
+  const query = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+  return getJSON<PublishedSkill[]>(`/skills${query}`);
+}
+
 export function startChat(skillId: string, message: string) {
   return postJSON<ChatResponse>(`/chat/${skillId}`, { message });
 }

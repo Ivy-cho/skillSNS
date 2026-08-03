@@ -72,6 +72,82 @@ Content-Type: multipart/form-data
 - 지금은 프론트에서 전송만 하며, 백엔드가 해당 stage 메시지를 처리하지 않으면 UX가
   기대대로 동작하지 않을 수 있음. 처리 방식(무시/에러/개선반영)을 정해주세요.
 
+## [백엔드 요청] 소셜 로그인 연동 — user-service 설정 2가지
+
+프론트에 로그인 화면(`/login`)과 OAuth 콜백(`/auth/callback`)을 붙였다. user-service의
+기존 계약(`/auth/login/{provider}` → `login_url`, `/auth/callback?code=` → `TokenResponse`)을
+그대로 쓰며, 프론트 연동 코드는 `src/lib/authClient.ts`에 있다.
+
+**흐름**: `/login`에서 제공자 선택 → `GET {user-service}/auth/login/{kakao|google}`로 로그인
+URL을 받아 이동 → 인증 후 `CALLBACK_URL`로 `code`와 함께 복귀 → 프론트가
+`GET {user-service}/auth/callback?code=`로 토큰 교환 → 세션 저장 후 `/home` 진입.
+
+동작하려면 user-service 쪽 설정 2가지가 필요하다.
+
+1. **CORS 허용** — `user-service/main.py`에 CORS 미들웨어가 없어서, 브라우저에서 프론트
+   (`http://localhost:3000`)가 8001을 호출하면 차단된다. skill-service처럼
+   `CORSMiddleware`로 프론트 오리진(로컬 `http://localhost:3000`, 배포는 Vercel 도메인)을
+   허용해 주세요.
+2. **CALLBACK_URL을 프론트로** — 현재 `user-service/.env`의 `CALLBACK_URL`이 user-service
+   자신(`http://localhost:8001/auth/callback`)을 가리킨다. 그러면 인증 후 사용자가 백엔드
+   JSON 화면에 떨어지고 프론트가 토큰을 받을 수 없다. **`http://localhost:3000/auth/callback`**
+   (배포 시 프론트 도메인)로 바꿔야 한다. Supabase 대시보드의 Redirect URL 허용 목록에도
+   같은 주소를 추가해야 한다.
+
+**그 외 확인 사항**
+- 프론트는 지금 access/refresh 토큰을 `localStorage`에 저장한다(키 `skillsns.*`). XSS 노출
+  위험이 있어 실서비스 전에는 httpOnly 쿠키 방식으로 옮길지 함께 정해야 한다.
+- 로그인 연동이 끝나면 skill-service 호출에 쓰던 `NEXT_PUBLIC_DEV_TOKEN` 우회를 제거하고,
+  발급받은 access token을 쓰도록 `backendClient.ts`를 바꿀 예정. **user-service가 발급한
+  토큰을 skill-service가 그대로 검증할 수 있는지**(JWT_SECRET_KEY/알고리즘 공유 여부) 확인 필요.
+- 프론트 로그인 버튼은 카카오·구글 2종만 노출한다(백엔드는 naver도 지원).
+- 소셜 버튼 로고는 지금 인라인 SVG 근사본이라, 배포 전 카카오/구글 **공식 애셋**으로 교체 필요.
+
+## [백엔드 요청] 프로필 편집 (사진 / 닉네임 / 소개글)
+
+내 홈(`/home`)과 프로필 편집 화면(`/profile/edit`)을 프론트에 다 만들어 뒀다. 폼·미리보기·
+글자수 제한·저장 버튼까지 동작하며, **아래 API가 생기면 `PROFILE_SAVE_ENABLED`(현재 `false`,
+`src/app/profile/edit/page.tsx`)만 `true`로 바꾸면 바로 붙는다.**
+클라이언트 함수는 `src/lib/authClient.ts`의 `updateProfile` / `uploadAvatar`.
+
+**1. users 테이블 컬럼 추가**
+- `bio` (text, nullable) — 소개글. 프론트는 80자로 제한해서 보낸다.
+- `avatar_url` (text, nullable) — 프로필 사진 URL.
+- 두 필드를 `UserInfo`(= `/auth/me` 응답)에도 포함해 주세요. 프론트 타입은 이미
+  optional로 열어 뒀습니다.
+
+**2. 프로필 수정**
+```
+PATCH /auth/me
+Authorization: Bearer <access_token>
+Content-Type: application/json
+  { "nickname"?: string, "bio"?: string, "avatar_url"?: string | null }
+→ 200 UserInfo (수정 반영된 값)
+```
+- 부분 수정(보낸 필드만 반영). 닉네임은 프론트에서 1~20자로 제한해 보냅니다.
+
+**3. 프로필 사진 업로드**
+```
+POST /auth/me/avatar
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data
+  file=<이미지 파일>
+→ 200 { "avatar_url": "https://…" }
+```
+- 저장 위치(Supabase Storage 등)와 허용 용량·확장자는 백엔드 판단에 맡깁니다.
+- 프론트는 저장 시 `uploadAvatar` → 받은 URL을 `PATCH /auth/me`에 실어 보내는 순서로 호출합니다.
+
+## [백엔드 요청] 스킬 스크랩 + 폴더
+
+내 홈의 **스크랩 탭**은 지금 빈 상태("아직 스크랩한 스킬이 없어요")로만 두었다. 백엔드에
+스크랩/폴더 관련 테이블·API가 전혀 없어서다. 기능을 붙이려면 대략 아래가 필요하다.
+
+- **폴더**: 생성/이름변경/삭제, 사용자별 목록 (`name`, 스킬 개수)
+- **스크랩**: 스킬을 폴더에 담기/빼기, 폴더별 스킬 목록
+- 화면 설계상 폴더는 **이름을 사용자가 정할 수 있어야** 하고, 폴더 안에 스킬 리스트가 들어간다.
+
+API 모양이 정해지면 알려주세요. 프론트 화면은 그에 맞춰 붙이겠습니다.
+
 ## [백엔드 요청] 카테고리를 대화에서 정하기 (카테고리 선택 단계 제거)
 
 프론트에서 **카테고리 선택 단계를 없앴다.** 이제 앱 로드 시 자동으로 draft를 시작하고,

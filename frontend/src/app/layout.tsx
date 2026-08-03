@@ -23,7 +23,7 @@ const plexSansKR = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "skillsns",
+  title: "토마토",
   description: "누구나 자신의 노하우를 스킬로 만들고 공유하는 서비스",
 };
 

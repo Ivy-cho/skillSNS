@@ -7,7 +7,7 @@
 
 import type { PublishedSkill } from "@/lib/backendClient";
 import { CATEGORIES } from "../skill-creator/types";
-import type { FeedCard, HotQuestion, TrendingItem } from "./types";
+import type { FeedCard, TrendingItem } from "./types";
 
 export const MOCK_FEED_CARDS: FeedCard[] = [
   {
@@ -90,12 +90,6 @@ export const MOCK_TRENDING: TrendingItem[] = [
   { id: "t3", emoji: "💰", title: "첫 투자", author: "미영", categoryId: "finance" },
   { id: "t4", emoji: "💼", title: "자소서 첨삭", author: "한결", categoryId: "career" },
 ];
-
-export const MOCK_HOT_QUESTION: HotQuestion = {
-  question: "7평 원룸인데 침대 어디 두면 넓어 보여요?",
-  categoryId: "interior",
-  askedLabel: "방금 전 23명이 물어봄",
-};
 
 // 백엔드 스킬(PublishedSkill) → 피드 카드 매퍼 (실데이터 스왑용, 지금은 미사용).
 // 백엔드에 없는 필드(작성자 이름/한마디/Q&A/스크랩)는 임시값으로 채운다.

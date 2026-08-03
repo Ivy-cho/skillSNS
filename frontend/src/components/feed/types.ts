@@ -23,12 +23,6 @@ export type TrendingItem = {
   categoryId: string;
 };
 
-export type HotQuestion = {
-  question: string;
-  categoryId: string;
-  askedLabel: string; // 예: "방금 전 23명이 물어봄"
-};
-
 // 스크랩 수 → "1.2k" 표기
 export function formatCount(n: number): string {
   if (n >= 1000) {

@@ -117,7 +117,8 @@ export function getSkill(skillId: string) {
   return getJSON<SkillDetail>(`/skills/${skillId}`);
 }
 
-// 내가 만든 스킬 목록 (홈 화면). user_id를 주면 그 사람 것만 온다.
+// 스킬 목록 (GET /skills). user_id를 주면 그 사람 것만 — 내 홈의 "내 스킬" 탭이 이렇게 쓴다.
+// 인자 없이 부르면 전체 공개 목록 — 피드가 이렇게 쓴다.
 export function listSkills(userId?: string) {
   const query = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
   return getJSON<PublishedSkill[]>(`/skills${query}`);

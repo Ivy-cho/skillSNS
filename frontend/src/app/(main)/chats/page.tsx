@@ -1,7 +1,6 @@
+import { ChatList } from "@/components/chat_list/ChatList";
+
+// 폰 프레임·하단 네비는 (main)/layout.tsx가 감싸주므로 여기선 내용만 렌더한다.
 export default function ChatsPage() {
-  return (
-    <div className="flex h-full items-center justify-center p-5">
-      <p className="font-mono text-[0.7rem] uppercase tracking-wide text-muted">채팅 목록</p>
-    </div>
-  );
+  return <ChatList />;
 }

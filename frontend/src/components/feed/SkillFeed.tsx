@@ -31,11 +31,11 @@ export function SkillFeed() {
   const visibleCards = cards ?? [];
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface sm:h-[720px] sm:max-w-[390px] sm:rounded-[20px] sm:border sm:border-border sm:shadow-md">
+    // 폰 프레임(테두리·높이·라운드)은 (main)/layout.tsx가 감싸주므로 여기선 내용만 채운다.
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <header className="flex shrink-0 items-center gap-2 border-b border-border px-5 py-4">
         <span className="text-base">💬</span>
         <span className="text-[0.95rem] font-bold text-ink">스킬 피드</span>
-        <span className="ml-auto text-base">👤</span>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto bg-bg p-3.5">

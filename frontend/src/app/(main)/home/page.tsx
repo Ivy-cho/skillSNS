@@ -4,13 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { getCurrentUserId, getStoredUser, logout } from "@/lib/authClient";
-import { listSkills, type PublishedSkill } from "@/lib/backendClient";
+import { deleteSkill, listSkills, type PublishedSkill } from "@/lib/backendClient";
 import { CATEGORIES } from "@/components/skill-creator/types";
 import { ScrapTab } from "@/components/home/ScrapTab";
+import { CreateSkillSheet } from "@/components/home/CreateSkillSheet";
+import { SwipeableSkillItem } from "@/components/home/SwipeableSkillItem";
 import { getEmptyScraps, getScrapsSnapshot, subscribeScraps } from "@/lib/scrapStore";
-
-// 스킬 만들기 화면
-const CREATE_HREF = "/create";
 
 function emojiFor(category: string) {
   return CATEGORIES.find((c) => c.label === category)?.emoji ?? "🍅";
@@ -29,6 +28,7 @@ export default function HomePage() {
   const [tab, setTab] = useState<Tab>("mine");
   const [skills, setSkills] = useState<PublishedSkill[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const scraps = useSyncExternalStore(subscribeScraps, getScrapsSnapshot, getEmptyScraps);
 
   const user = getStoredUser();
@@ -50,11 +50,32 @@ export default function HomePage() {
     };
   }, []);
 
+  // 스킬 삭제 — 되돌릴 수 없어서 한 번 확인받는다.
+  async function handleDelete(skillId: string, title: string) {
+    if (!window.confirm(`"${title}" 스킬을 삭제할까요?\n삭제하면 되돌릴 수 없어요.`)) return;
+    setError(null);
+    setDeletingId(skillId);
+    try {
+      await deleteSkill(skillId);
+      setSkills((prev) => prev?.filter((s) => s.id !== skillId) ?? null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "스킬을 삭제하지 못했어요");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const mineCount = skills?.length ?? 0;
   const hasSkills = mineCount > 0;
 
   return (
     <div className="flex h-full flex-col">
+      {/* 화면 제목 — 피드·채팅 목록과 같은 헤더 형식 */}
+      <header className="flex shrink-0 items-center gap-2 border-b border-border px-5 py-4">
+        <span className="text-base">👤</span>
+        <span className="text-[0.95rem] font-bold text-ink">내 계정</span>
+      </header>
+
       {/* 프로필 */}
       <div className="px-5 pb-4 pt-5">
         <div className="flex items-center gap-3">
@@ -129,10 +150,11 @@ export default function HomePage() {
             )}
 
             {skills?.map((skill) => (
-              <Link
+              <SwipeableSkillItem
                 key={skill.id}
                 href={`/skill/${skill.id}`}
-                className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3 transition active:scale-[0.99]"
+                deleting={deletingId === skill.id}
+                onDelete={() => handleDelete(skill.id, skill.title)}
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-surface-2 text-base">
                   {emojiFor(skill.category)}
@@ -150,19 +172,14 @@ export default function HomePage() {
                     {formatDate(skill.created_at)}
                   </span>
                 </span>
-              </Link>
+              </SwipeableSkillItem>
             ))}
 
-            {/* 생성 버튼은 여기 하나만. 스킬이 없으면 "새 스킬 만들기", 있으면 "하나 더". */}
+            {/* 생성 진입점은 여기 하나만. 누르면 "새로 만들기 / 내 스킬 넣기"로 갈린다. */}
             {skills !== null && (
-              <Link
-                href={CREATE_HREF}
-                className={`flex items-center justify-center gap-1.5 rounded-2xl border-[1.5px] border-dashed border-primary py-4 text-[0.85rem] font-semibold text-primary-hover transition active:scale-[0.99] ${
-                  hasSkills ? "" : "mt-2"
-                }`}
-              >
-                ＋ {hasSkills ? "스킬 하나 더 만들기" : "새 스킬 만들기"}
-              </Link>
+              <div className={hasSkills ? "" : "mt-2"}>
+                <CreateSkillSheet label="내 스킬 만들기" />
+              </div>
             )}
 
             {skills !== null && !hasSkills && (

@@ -124,6 +124,29 @@ export function listSkills(userId?: string) {
   return getJSON<PublishedSkill[]>(`/skills${query}`);
 }
 
+// 내 스킬 삭제 (홈 목록에서 스와이프 → 삭제). 되돌릴 수 없다.
+export async function deleteSkill(skillId: string): Promise<void> {
+  const res = await fetch(`${BACKEND_URL}/skills/${skillId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${DEV_TOKEN}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new BackendError(body.detail ?? `삭제하지 못했어요 (${res.status})`);
+  }
+}
+
+// 이미 갖고 있는 프롬프트를 스킬로 바로 등록 ("내 스킬 넣기").
+// md_content가 그대로 이 스킬의 시스템 프롬프트가 되어 /skill/[id] 대화에 쓰인다.
+export function createSkillDirect(body: {
+  title: string;
+  category: string;
+  md_content: string;
+  description?: string | null;
+}) {
+  return postJSON<PublishedSkill>("/skills", body);
+}
+
 export function startChat(skillId: string, message: string) {
   return postJSON<ChatResponse>(`/chat/${skillId}`, { message });
 }

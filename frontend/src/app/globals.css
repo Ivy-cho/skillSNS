@@ -52,6 +52,35 @@ body {
     "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
 }
 
+/* 스크롤바 — 기본 회색 대신 브랜드 그린에서 파생한 톤을 쓴다(새 색을 만들지 않는다).
+   평소엔 옅게 깔리고, 스크롤 영역에 마우스를 올리면 조금 진해진다. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--primary) 40%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--primary) 40%, transparent);
+  border-radius: 999px;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--primary) 65%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
 @keyframes rise {
   from {
     opacity: 0;

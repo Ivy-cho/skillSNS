@@ -16,6 +16,8 @@
 | 스킬 만들기 파이프라인 | ✅ `what_skill` → `skill_content` → `skill_name` → `skill_test` → `skill_improve` → `confirm` 전부 실제 호출 (`backendClient.ts`) |
 | 스킬 목록 | ✅ `GET /skills?user_id=` — 내 홈의 "내 스킬" 탭 |
 | 스킬로 대화하기 | ✅ `GET /skills/{id}` + `POST /chat/{id}` — `/skill/[id]` 화면 |
+| 스킬 직접 등록 | ✅ `POST /skills` — "내 스킬 넣기"(`/skill/new`). 넣은 프롬프트가 `md_content`로 저장돼 그대로 대화에 쓰입니다. **추가 작업 없음** |
+| 스킬 삭제 | ✅ `DELETE /skills/{id}` — 내 스킬 목록에서 스와이프(터치)/호버(마우스) → 삭제. **추가 작업 없음** |
 | 인증 | ⚠️ `NEXT_PUBLIC_DEV_TOKEN`(로컬 서명 토큰)으로 우회 중. 아래 1번이 열리면 제거 예정 |
 
 ---
@@ -64,7 +66,40 @@ No 'Access-Control-Allow-Origin' header is present
 
 ---
 
-## 🟡 2. 프로필 편집 (사진 / 닉네임 / 소개글)
+## 🔴 2. skill-service가 유휴 상태 후 DB 연결이 끊깁니다 (개발 계속 막힘)
+
+**증상**: 컨테이너를 띄워 둔 채 몇 시간 지나면, 이후 모든 요청이 500이 됩니다.
+프론트 화면에는 그냥 "failed to fetch"로만 보여서 원인을 찾기 어렵습니다.
+2026-08-03 하루에만 5번 넘게 겪었고, 그때마다 `docker restart`로만 풀렸습니다.
+
+**혼동 포인트** — 겉으로는 정상처럼 보입니다.
+- `docker ps` → `Up N hours` (컨테이너는 살아 있음)
+- `GET /` 헬스체크 → **200** (DB를 안 타는 경로라 통과)
+- 그런데 `POST /skills/create` 같은 **DB를 쓰는 요청만 500**
+
+**실제 로그** (`docker logs skillsns-team-skill-service-1`):
+```
+psycopg.OperationalError: the connection is closed
+  File ".../langgraph/checkpoint/postgres/aio.py", line 205, in aget_tuple
+  File ".../psycopg/_connection_base.py", line 532, in _check_connection_ok
+```
+langgraph의 Postgres 체크포인터가 들고 있는 커넥션이 끊긴 뒤 재연결되지 않는 것으로 보입니다.
+(Supabase 쪽 유휴 타임아웃에 걸리는 것 같습니다.)
+
+**요청**: 커넥션 풀에 **pre-ping / 자동 재연결**을 걸어 주세요. 예를 들어
+- SQLAlchemy 엔진: `pool_pre_ping=True`, `pool_recycle=<타임아웃보다 짧게>`
+- langgraph `AsyncPostgresSaver`가 쓰는 psycopg 풀에도 동일하게 재연결 옵션 적용
+
+**현재 우회법**: `docker restart skillsns-team-skill-service-1`
+확인은 헬스체크가 아니라 **실제 DB를 타는 요청**으로 해야 합니다:
+```bash
+curl -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8002/skills/create \
+  -H "Authorization: Bearer $DEV_TOKEN" -F "category=여러 분야"
+```
+
+---
+
+## 🟡 3. 프로필 편집 (사진 / 닉네임 / 소개글)
 
 **프론트 상태**: 내 홈(`/home`)과 프로필 편집 화면(`/profile/edit`) 완성. 사진 미리보기,
 글자수 제한, 저장 버튼까지 동작합니다. 클라이언트 함수도 준비됨
@@ -102,7 +137,7 @@ Content-Type: multipart/form-data
 
 ---
 
-## 🟡 3. 스킬 스크랩 + 폴더
+## 🟡 4. 스킬 스크랩 + 폴더
 
 **프론트 상태**: 기능이 **전부 동작합니다** — 다만 저장이 브라우저(localStorage)라
 기기·계정 간 공유가 안 됩니다.
@@ -134,7 +169,43 @@ DELETE /scrap/{skill_id}                                  → 빼기
 
 ---
 
-## 🟢 4. 스킬 만들기 파이프라인 관련
+## 🟡 5. 피드 · 채팅 목록 데이터 (화면은 완성, 데이터가 목업)
+
+하단 네비의 **피드**와 **채팅 목록** 화면이 붙었습니다. UI·로딩·에러·빈 상태까지 다 되어 있고
+**데이터만 목업**입니다. 각각 함수 하나가 유일한 교체 지점입니다.
+
+### (1) 피드 — `src/components/feed/feedData.ts`의 `getFeedCards()`
+지금은 `MOCK_FEED_CARDS`를 반환합니다. 화면이 카드 하나당 쓰는 값:
+
+| 필드 | 지금 | 백엔드에서 받고 싶은 것 |
+|---|---|---|
+| `id`, `title` | ✅ `GET /skills`로 가능 | 그대로 |
+| `categoryId` | ⚠️ 목업 | 스킬의 카테고리 (필터 칩에 씀) |
+| `author.name` | ❌ 없음 | **스킬 만든 사람 닉네임** — 지금 `/skills`는 `user_id`만 줍니다 |
+| `comment` | ❌ 없음 | 스킬 주인이 남긴 "한마디" (한 줄 소개) |
+| `qa` | ❌ 없음 | 미리보기용 대표 질문/답변 1쌍 |
+| `scrapCount` | ❌ 없음 | 스크랩된 횟수 (4번 항목과 연결) |
+
+- **최소안**: `GET /skills`에 **작성자 닉네임**만 얹어 줘도 카드가 서게 됩니다
+  (comment·qa는 프론트에서 description으로 대체 가능).
+- **추천안**: 피드 전용 엔드포인트(예: `GET /feed`)로 위 필드를 한 번에 내려주기.
+  정렬 기준(최신순/인기순)과 페이지네이션도 이때 정해 주세요.
+- 상단 "요즘 뜨는 스킬"(`MOCK_TRENDING`)도 같은 목업입니다 — 인기 스킬 몇 개를 주면 됩니다.
+
+### (2) 채팅 목록 — `src/components/chat_list/chatData.ts`의 `getChats()`
+지금은 `MOCK_CONVERSATIONS`를 반환합니다. **"내가 어떤 스킬과 대화했는지" 목록 API가 없습니다.**
+
+```
+GET /chat/sessions            (이름은 편한 대로)
+Authorization: Bearer <access_token>
+→ [{ skill_id, skill_title, last_message, last_message_at, summary? }]
+```
+프론트가 쓰는 모양은 `Conversation`(`chat_list/types.ts`):
+`id`(=스킬 id, 탭하면 `/skill/{id}`로 이동) · `skillName` · `avatar` · `summary` · `lastMessage` · `timeLabel`
+- `summary`는 없으면 생략 가능(프론트에서 마지막 메시지로 대체).
+- `timeLabel`("어제", "3일 전")은 프론트에서 만들 테니 **ISO 시각**만 주세요.
+
+## 🟢 6. 스킬 만들기 파이프라인 관련
 
 ### (1) 이전 단계로 되돌리기 (revert)
 **프론트 상태**: "이 단계부터 수정" 버튼·핸들러·클라이언트 함수(`revertToStage`) 완성,
@@ -185,5 +256,5 @@ stage로 되돌림 → 그 stage의 **시작 상태**(안내/질문 메시지 �
 
 - **파일 첨부** — `AttachModal`에서 고른 파일이 `continueDraft`로 전송되고 백엔드가 텍스트를
   추출하지만, 첨부 UX(진행 표시, 실패 처리)는 다듬을 여지가 있습니다.
-- **피드 / 채팅 목록** — 하단 네비에 자리는 잡아 뒀지만 화면은 비어 있습니다. 어떤 데이터를
-  보여줄지(팔로우 기반 피드? 전체 스킬?) 정해지면 API 논의가 필요합니다.
+- **피드 정렬 기준** — 위 5번에서 API를 정할 때, 피드를 무엇으로 채울지도 정해야 합니다
+  (전체 스킬 최신순 / 인기순 / 나중에 팔로우 기반).

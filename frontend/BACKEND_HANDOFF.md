@@ -4,6 +4,9 @@
 공통 원칙: **화면은 미리 다 만들어 두고**, API가 생기면 플래그를 켜거나 저장소 구현만
 바꾸면 붙도록 해뒀습니다. 각 항목에 "프론트 상태 / 필요한 것 / 붙이는 법"을 적었습니다.
 
+**읽는 순서**: 아래 표로 현황을 보고 → 🔴 / 🟢 / 그 외가 **아직 요청 중인 것**입니다.
+완료된 항목은 문서 맨 아래 "아래는 완료된 항목"으로 내려 두었습니다(해결 방법 기록용).
+
 로컬 실행·테스트 절차는 저장소 루트 `README.md`의 "6. 프론트엔드 연동 테스트"와
 `docs/frontend-integration.md` 참고.
 
@@ -66,6 +69,70 @@ redirect_uri  = https://twumveupobzimkkiqlim.supabase.co/auth/v1/callback
 (카카오가 계속 막히면 로그인 화면에서 카카오 버튼을 잠시 감추는 것도 방법입니다 — 원하시면 말씀해 주세요.)
 
 ---
+
+## 🟢 스킬 만들기 파이프라인 — 남은 것
+
+### (1) 이전 단계로 되돌리기 (revert)
+**프론트 상태**: "이 단계부터 수정" 버튼·핸들러·클라이언트 함수(`revertToStage`) 완성,
+현재 비활성.
+**붙이는 법**: `SkillCreator.tsx`의 `EDIT_BACK_ENABLED`를 `true`로.
+
+```
+POST /skills/create/{draft_id}/revert
+Content-Type: multipart/form-data
+  stage=<what_skill | skill_content | skill_name | skill_test>
+→ 200 CreationResponse (기존과 동일한 모양)
+```
+**기대 동작**: 지정 stage 이후로 누적된 `skill_info`·대화를 폐기 → draft stage를 지정
+stage로 되돌림 → 그 stage의 **시작 상태**(안내/질문 메시지 포함)를 응답.
+이미 `confirm`(게시)된 draft는 revert 불가 → 409 등 에러 권장(`detail`을 프론트가 그대로 노출).
+
+### (2) 카테고리를 대화에서 확정
+프론트에서 **카테고리 선택 단계를 없앴습니다.** 앱 로드 시 자동으로 draft를 시작하고,
+분야는 첫 단계(주제 정하기) 대화에서 정해집니다.
+- **현재 임시 처리**: `create`가 category를 필수(`Form(...)`)로 요구해서 중립 기본값
+  `"여러 분야"`(`SkillCreator.tsx`의 `DEFAULT_CATEGORY`)로 시작합니다. 첫 질문이 열린
+  형태로 나와 대화는 자연스러운데, **`skill_info.category`엔 "여러 분야"가 그대로 저장**됩니다.
+- **요청**: (1) create에서 category를 옵션으로 받거나 빈 값 허용, (2) what_skill 대화에서
+  실제 분야를 파악해 `skill_info.category`를 확정·저장. 그래야 게시된 스킬에 실제
+  카테고리가 담깁니다.
+
+### (3) 테스트 리포트가 불완전하게 오는 경우
+채점(`test_node`의 `grade_llm` → `SkillTestOutput`)이 **가끔 리포트를 불완전하게 생성**합니다.
+실제 관측: 채점은 200 OK인데 `benchmark.passRate`가 통째로 빠져서, 프론트가 그 필드를 읽다
+런타임 크래시(앱 화이트아웃)했습니다.
+- **프론트 대응(완료)**: `TestReport`를 방어적으로 수정 — 없는 섹션/필드는 건너뛰고 앱이
+  죽지 않습니다. 단 값이 없으면 그 부분은 화면에 안 나옵니다.
+- **요청**: `test_report.schema.json`은 `benchmark.passRate/time/aiCost`를 required로
+  정의하지만 LLM tool-call이 항상 채우진 않습니다. 스키마 검증 후 재요청 또는 프롬프트
+  강화로 **완전한 리포트를 보장**해 주세요.
+
+### (4) 테스트/개선 단계의 자유 메시지 — 확인 요청
+입력창을 주제·내용 단계뿐 아니라 **테스트·개선 단계에도** 띄웁니다
+(`SkillCreator.tsx`의 `CHAT_INPUT_PHASES`). 그 단계에서 입력한 자유 메시지는 기존
+`continueDraft`와 동일하게 `POST /skills/create/{draft_id}`로 전송됩니다.
+- skill-service가 `skill_test` / `skill_improve` stage에서 들어온 자유 메시지를 받아
+  처리(예: "이 부분을 이렇게 고쳐줘")해 주는지 확인이 필요합니다.
+- 처리 방식(무시 / 에러 / 개선 반영)을 정해주세요.
+
+---
+
+## 그 외 다듬을 거리
+
+- **파일 첨부** — `AttachModal`에서 고른 파일이 `continueDraft`로 전송되고 백엔드가 텍스트를
+  추출하지만, 첨부 UX(진행 표시, 실패 처리)는 다듬을 여지가 있습니다.
+- **피드 검색 API** — 피드의 "어떤 고민이 있으세요?" 검색은 지금 **이미 불러온 카드 안에서만**
+  걸러냅니다(`SkillFeed.tsx`의 `matches()`). 스킬이 수백 건으로 늘면 전체를 받아올 수 없으니
+  서버 검색이 필요합니다. 예: `GET /feed?q=<검색어>` — 제목·소개·작성자·카테고리를 대상으로,
+  페이지네이션과 함께. 급하지 않지만 데이터가 늘기 전에 정해두면 좋습니다.
+- **피드 정렬 기준** — 피드를 무엇으로 채울지 정해야 합니다
+  (전체 스킬 최신순 / 인기순 / 나중에 팔로우 기반).
+
+---
+
+# 아래는 완료된 항목 (참고용)
+
+이미 구현돼 동작하는 것들입니다. 무엇을 어떻게 해결했는지 기록으로 남겨 둡니다.
 
 ## ✅ 1. 소셜 로그인 — 설정 2가지 (완료, 2026-08-17 · 단 카카오는 위 항목 참고)
 
@@ -253,61 +320,3 @@ Authorization: Bearer <access_token>
 방식으로 꺼내옵니다. `summary`는 만들지 않음 — 프론트가 `Conversation.summary`를 빈
 문자열로 두면 `ChatListItem`이 알아서 그 줄을 숨기고 마지막 메시지만 보여줍니다.
 `avatar`는 `category`를 skill-creator `CATEGORIES`의 이모지로 매핑해서 프론트가 만듭니다.
-
-## 🟢 6. 스킬 만들기 파이프라인 관련
-
-### (1) 이전 단계로 되돌리기 (revert)
-**프론트 상태**: "이 단계부터 수정" 버튼·핸들러·클라이언트 함수(`revertToStage`) 완성,
-현재 비활성.
-**붙이는 법**: `SkillCreator.tsx`의 `EDIT_BACK_ENABLED`를 `true`로.
-
-```
-POST /skills/create/{draft_id}/revert
-Content-Type: multipart/form-data
-  stage=<what_skill | skill_content | skill_name | skill_test>
-→ 200 CreationResponse (기존과 동일한 모양)
-```
-**기대 동작**: 지정 stage 이후로 누적된 `skill_info`·대화를 폐기 → draft stage를 지정
-stage로 되돌림 → 그 stage의 **시작 상태**(안내/질문 메시지 포함)를 응답.
-이미 `confirm`(게시)된 draft는 revert 불가 → 409 등 에러 권장(`detail`을 프론트가 그대로 노출).
-
-### (2) 카테고리를 대화에서 확정
-프론트에서 **카테고리 선택 단계를 없앴습니다.** 앱 로드 시 자동으로 draft를 시작하고,
-분야는 첫 단계(주제 정하기) 대화에서 정해집니다.
-- **현재 임시 처리**: `create`가 category를 필수(`Form(...)`)로 요구해서 중립 기본값
-  `"여러 분야"`(`SkillCreator.tsx`의 `DEFAULT_CATEGORY`)로 시작합니다. 첫 질문이 열린
-  형태로 나와 대화는 자연스러운데, **`skill_info.category`엔 "여러 분야"가 그대로 저장**됩니다.
-- **요청**: (1) create에서 category를 옵션으로 받거나 빈 값 허용, (2) what_skill 대화에서
-  실제 분야를 파악해 `skill_info.category`를 확정·저장. 그래야 게시된 스킬에 실제
-  카테고리가 담깁니다.
-
-### (3) 테스트 리포트가 불완전하게 오는 경우
-채점(`test_node`의 `grade_llm` → `SkillTestOutput`)이 **가끔 리포트를 불완전하게 생성**합니다.
-실제 관측: 채점은 200 OK인데 `benchmark.passRate`가 통째로 빠져서, 프론트가 그 필드를 읽다
-런타임 크래시(앱 화이트아웃)했습니다.
-- **프론트 대응(완료)**: `TestReport`를 방어적으로 수정 — 없는 섹션/필드는 건너뛰고 앱이
-  죽지 않습니다. 단 값이 없으면 그 부분은 화면에 안 나옵니다.
-- **요청**: `test_report.schema.json`은 `benchmark.passRate/time/aiCost`를 required로
-  정의하지만 LLM tool-call이 항상 채우진 않습니다. 스키마 검증 후 재요청 또는 프롬프트
-  강화로 **완전한 리포트를 보장**해 주세요.
-
-### (4) 테스트/개선 단계의 자유 메시지 — 확인 요청
-입력창을 주제·내용 단계뿐 아니라 **테스트·개선 단계에도** 띄웁니다
-(`SkillCreator.tsx`의 `CHAT_INPUT_PHASES`). 그 단계에서 입력한 자유 메시지는 기존
-`continueDraft`와 동일하게 `POST /skills/create/{draft_id}`로 전송됩니다.
-- skill-service가 `skill_test` / `skill_improve` stage에서 들어온 자유 메시지를 받아
-  처리(예: "이 부분을 이렇게 고쳐줘")해 주는지 확인이 필요합니다.
-- 처리 방식(무시 / 에러 / 개선 반영)을 정해주세요.
-
----
-
-## 그 외 다듬을 거리
-
-- **파일 첨부** — `AttachModal`에서 고른 파일이 `continueDraft`로 전송되고 백엔드가 텍스트를
-  추출하지만, 첨부 UX(진행 표시, 실패 처리)는 다듬을 여지가 있습니다.
-- **피드 검색 API** — 피드의 "어떤 고민이 있으세요?" 검색은 지금 **이미 불러온 카드 안에서만**
-  걸러냅니다(`SkillFeed.tsx`의 `matches()`). 스킬이 수백 건으로 늘면 전체를 받아올 수 없으니
-  서버 검색이 필요합니다. 예: `GET /feed?q=<검색어>` — 제목·소개·작성자·카테고리를 대상으로,
-  페이지네이션과 함께. 급하지 않지만 데이터가 늘기 전에 정해두면 좋습니다.
-- **피드 정렬 기준** — 위 5번에서 API를 정할 때, 피드를 무엇으로 채울지도 정해야 합니다
-  (전체 스킬 최신순 / 인기순 / 나중에 팔로우 기반).

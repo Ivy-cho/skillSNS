@@ -200,7 +200,7 @@ git push (backend 브랜치)
 
 **user-service**
 ```
-GET  /auth/login/{provider}    # provider: google / kakao / naver
+GET  /auth/login/{provider}    # provider: google / kakao
 GET  /auth/callback            # OAuth 콜백 (자동 처리됨)
 GET  /auth/me                  # 현재 로그인 사용자 정보
 POST /auth/refresh             # Access Token 갱신

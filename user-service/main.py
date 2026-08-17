@@ -3,6 +3,7 @@ import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -19,6 +20,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="skillSNS - User Service", version="1.0.0", lifespan=lifespan)
+
+# 프론트(frontend/, Next.js dev server)가 브라우저에서 직접 이 서버를 호출한다.
+# 로컬 개발용 origin만 허용 — 배포 시엔 실제 프론트 도메인으로 좁혀야 한다.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(auth_router)
 

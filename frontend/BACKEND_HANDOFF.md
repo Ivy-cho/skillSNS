@@ -61,7 +61,7 @@ No 'Access-Control-Allow-Origin' header is present
   위험이 있어 실서비스 전 **httpOnly 쿠키** 방식으로 옮길지 함께 정해야 합니다.
 - 로그인이 붙으면 `NEXT_PUBLIC_DEV_TOKEN` 우회를 제거할 예정입니다. **user-service가 발급한
   토큰을 skill-service가 그대로 검증할 수 있나요?** (JWT_SECRET_KEY/알고리즘 공유 여부)
-- 프론트 로그인 버튼은 카카오·구글 2종만 노출합니다(백엔드는 naver도 지원).
+- 프론트 로그인 버튼은 카카오·구글 2종만 노출합니다(백엔드도 이제 이 2종만 지원, naver 제거됨).
 - 소셜 버튼 로고는 인라인 SVG 근사본이라, 배포 전 카카오/구글 **공식 애셋**으로 교체 필요.
 
 ---

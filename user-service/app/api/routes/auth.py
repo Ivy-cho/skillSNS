@@ -22,7 +22,7 @@ from app.schemas.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 bearer_scheme = HTTPBearer()
 
-SUPPORTED_PROVIDERS = {"google", "kakao", "naver"}
+SUPPORTED_PROVIDERS = {"google", "kakao"}
 
 supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
 

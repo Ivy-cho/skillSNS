@@ -118,7 +118,7 @@ Refresh Token이 7일이면 → 7일 동안 로그인이 안 풀린다.
 ### 채택 스펙
 | 항목 | 결정 |
 |---|---|
-| 로그인 방식 | 소셜 로그인 (Google, Kakao, Naver) |
+| 로그인 방식 | 소셜 로그인 (Google, Kakao) |
 | OAuth 처리 | Supabase Auth |
 | 토큰 전략 | Access Token + Refresh Token |
 | Access Token 수명 | 1시간 |

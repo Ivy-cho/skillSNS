@@ -85,7 +85,7 @@
 ### 결정: Supabase Auth (소셜 로그인)
 
 #### 소셜 로그인 제공자
-- Google / Kakao / Naver
+- Google / Kakao
 
 #### 검토한 방식
 | 방식 | 검토 내용 |
@@ -95,7 +95,7 @@
 
 #### 채택 이유
 - 토이 프로젝트 특성상 빠른 구현 우선
-- Supabase Auth가 Google / Kakao / Naver OAuth 플로우 자동 처리
+- Supabase Auth가 Google / Kakao OAuth 플로우 자동 처리
 - 향후 서비스 확장 시 직접 구현으로 전환 예정
 
 #### 토큰 전략
@@ -114,7 +114,7 @@
 | 프레임워크 | FastAPI | 비동기, Swagger 자동 생성 |
 | DB | Supabase (PostgreSQL) | 무료 클라우드 호스팅 |
 | ORM | SQLAlchemy | psycopg2 드라이버 |
-| 인증 | Supabase Auth + JWT | 소셜 로그인 (Google / Kakao / Naver) |
+| 인증 | Supabase Auth + JWT | 소셜 로그인 (Google / Kakao) |
 | 컨테이너 | Docker + docker-compose | 로컬 개발용 |
 | 배포 | Render | GitHub 연동 자동 배포 |
 | LLM | 미정 (유료) | Agent/Prompt 오케스트레이션용 |

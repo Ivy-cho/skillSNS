@@ -8,11 +8,14 @@
 
 ## 왜 임시 개발용 토큰이 필요한가
 
-user-service의 소셜 로그인(Google/Kakao/Naver) UI가 프론트엔드에는 아직 붙어있지 않다.
-skill-service의 `/skills/create/*` 엔드포인트는 전부 JWT를 요구하므로, 로컬에서 화면을
-테스트하려면 **skill-service와 같은 `JWT_SECRET_KEY`로 직접 서명한 토큰**을 만들어 써야
-한다. 이건 실제 인증 흐름이 아니라 순수하게 로컬 배선을 확인하기 위한 우회로다 — 실제
-서비스에서는 user-service가 발급한 토큰을 써야 한다.
+프론트엔드에 user-service 소셜 로그인(Google/Kakao) UI 자체는 붙었지만(로그인 →
+`/auth/callback` → 토큰 저장까지 동작), user-service가 발급한 토큰을 skill-service가
+그대로 검증할 수 있는지는 아직 확인되지 않았다(둘이 같은 `JWT_SECRET_KEY`/알고리즘을
+쓰는지 여부, `frontend/BACKEND_HANDOFF.md` 참고). 그게 확인되기 전까지 skill-service의
+`/skills/create/*` 엔드포인트를 로컬에서 테스트하려면 **skill-service와 같은
+`JWT_SECRET_KEY`로 직접 서명한 토큰**을 만들어 써야 한다. 이건 실제 인증 흐름이 아니라
+순수하게 로컬 배선을 확인하기 위한 우회로다 — 두 서비스 간 토큰 호환이 확인되면 이 우회로는
+제거한다.
 
 ## 왜 CORS 설정이 필요한가
 

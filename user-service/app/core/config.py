@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    CALLBACK_URL: str = "http://localhost:8001/"
+    CALLBACK_URL: str = "http://localhost:3000/auth/callback"
 
     class Config:
         env_file = ".env"

@@ -8,7 +8,7 @@
 
 ## 1. 개요
 
-Supabase Auth를 통해 소셜 로그인(Google / Kakao / Naver)을 처리하고,
+Supabase Auth를 통해 소셜 로그인(Google / Kakao)을 처리하고,
 자체 JWT(Access Token + Refresh Token)를 발급하여 클라이언트에 반환한다.
 
 ---
@@ -19,7 +19,6 @@ Supabase Auth를 통해 소셜 로그인(Google / Kakao / Naver)을 처리하고
 |---|---|
 | Google | ✅ |
 | Kakao | ✅ |
-| Naver | ✅ |
 
 ---
 
@@ -38,7 +37,7 @@ user-service
   │
   │  3. 소셜 플랫폼 로그인 화면으로 리다이렉트
   ▼
-Google / Kakao / Naver
+Google / Kakao
   │
   │  4. 인증 완료 → Authorization Code 발급
   ▼
@@ -68,7 +67,7 @@ user-service (callback)
 **Path Parameter**
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| provider | string | ✅ | `google` / `kakao` / `naver` |
+| provider | string | ✅ | `google` / `kakao` |
 
 **응답 (200 OK)**
 ```json
@@ -202,7 +201,7 @@ Authorization: Bearer {access_token}
 | id | UUID | PK, 자동 생성 |
 | email | VARCHAR | 소셜 계정 이메일 |
 | nickname | VARCHAR | 표시 이름 |
-| provider | VARCHAR | `google` / `kakao` / `naver` |
+| provider | VARCHAR | `google` / `kakao` |
 | provider_id | VARCHAR | 소셜 플랫폼 고유 ID |
 | created_at | TIMESTAMP | 가입일 |
 | updated_at | TIMESTAMP | 수정일 |

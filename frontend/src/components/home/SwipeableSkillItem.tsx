@@ -7,8 +7,9 @@ const REVEAL = 84; // 삭제 버튼이 드러나는 폭(px)
 const OPEN_AT = 40; // 이만큼 이상 밀면 열린 채로 고정
 const DRAG_SLOP = 6; // 이 이하 움직임은 탭으로 본다 (스와이프 중 링크 이동 방지)
 
-// 왼쪽으로 밀면 뒤에서 "삭제"가 드러나는 목록 항목.
-// 터치·마우스 모두 pointer 이벤트 하나로 처리한다.
+// 왼쪽으로 끌면 뒤에서 "삭제"가 드러나는 목록 항목.
+// 터치는 스와이프, 마우스는 클릭한 채로 드래그 — pointer 이벤트 하나로 둘 다 처리한다.
+// (호버로 자동 노출하지 않는다: 마우스를 올리는 것만으로 열리면 드래그할 틈이 없다.)
 export function SwipeableSkillItem({
   href,
   onDelete,
@@ -66,8 +67,8 @@ export function SwipeableSkillItem({
   }
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl">
-      {/* 뒤에 깔린 삭제 버튼 — 터치에선 왼쪽으로 밀면 드러나고, 마우스에선 카드에 올리면 보인다. */}
+    <div className="relative overflow-hidden rounded-2xl">
+      {/* 뒤에 깔린 삭제 버튼 — 카드를 왼쪽으로 끌면(터치 스와이프 / 마우스 클릭-드래그) 드러난다. */}
       <button
         type="button"
         onClick={onDelete}
@@ -88,19 +89,17 @@ export function SwipeableSkillItem({
           transform: `translateX(${dx}px)`,
           // 세로 스크롤은 브라우저에 맡기고 가로 제스처는 우리가 처리한다 (뒤로가기 제스처 방지).
           touchAction: "pan-y",
-          // 끄는 동안 글자가 선택되지 않게.
-          userSelect: dragging ? "none" : undefined,
         }}
-        // 마우스가 있는 기기에선 항목에 올리기만 해도 밀려서 삭제가 드러난다(끌지 않아도 되게).
-        // 카드가 아니라 바깥 래퍼(group) 기준이라, 밀린 뒤 포인터가 삭제 버튼 위에 있어도
-        // 계속 열려 있다 — 카드 기준으로 하면 열렸다 닫혔다 깜빡인다.
-        // 손으로 밀어 둔 상태(dx≠0)면 그 값이 우선.
-        className={`relative bg-surface ${
-          dragging ? "" : "transition-transform duration-200"
-        } ${dx === 0 ? "group-hover:-translate-x-[84px]" : ""} motion-reduce:transition-none`}
+        className={`relative select-none bg-surface ${
+          dragging ? "cursor-grabbing" : "cursor-grab transition-transform duration-200"
+        } motion-reduce:transition-none`}
       >
         <Link
           href={href}
+          // 링크·이미지는 브라우저가 기본으로 "끌어서 옮기기"(네이티브 드래그)를 시작한다.
+          // 그러면 우리 pointermove가 끊겨 밀리지 않으므로 그 기본 동작을 끈다.
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
           // 미는 동작이었으면 링크 이동을 막는다.
           onClick={(e) => {
             if (moved.current > DRAG_SLOP || openRef.current) {

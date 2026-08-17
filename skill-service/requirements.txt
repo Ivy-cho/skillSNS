@@ -9,6 +9,7 @@ langchain-anthropic
 langgraph
 langgraph-checkpoint-postgres
 psycopg[binary]
+psycopg-pool
 httpx
 trafilatura
 pypdf

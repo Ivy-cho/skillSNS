@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
 
 from app.api.routes.chat import router as chat_router
 from app.api.routes.skill_creation import router as skill_creation_router
@@ -21,7 +23,17 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    async with AsyncPostgresSaver.from_conn_string(settings.CHECKPOINTER_URL) as checkpointer:
+    # AsyncPostgresSaver.from_conn_string()은 커넥션 하나를 앱 수명 내내 물고 있어서,
+    # Supabase 쪽 유휴 타임아웃에 걸려 끊기면 재연결 없이 계속 에러를 낸다(연결이 죽어도
+    # 스스로 알아채지 못함). 대신 풀을 직접 만들어서, 매 체크아웃마다 살아있는지 확인하고
+    # (check=check_connection) 오래된 커넥션은 자동으로 회수·재생성되게 한다.
+    async with AsyncConnectionPool(
+        conninfo=settings.CHECKPOINTER_URL,
+        max_size=20,
+        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        check=AsyncConnectionPool.check_connection,
+    ) as pool:
+        checkpointer = AsyncPostgresSaver(pool)
         await checkpointer.setup()
         app.state.checkpointer = checkpointer
         yield

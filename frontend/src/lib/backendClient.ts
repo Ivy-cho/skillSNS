@@ -162,3 +162,17 @@ export function startChat(skillId: string, message: string) {
 export function continueChat(skillId: string, sessionId: string, message: string) {
   return postJSON<ChatResponse>(`/chat/${skillId}/${sessionId}`, { message });
 }
+
+export type ChatSessionSummary = {
+  skill_id: string;
+  skill_title: string;
+  category: string;
+  session_id: string;
+  last_message: string;
+  last_message_at: string;
+};
+
+// "내가 어떤 스킬과 대화했는지" 목록 (채팅 목록 화면).
+export function listChatSessions() {
+  return getJSON<ChatSessionSummary[]>("/chat/sessions");
+}

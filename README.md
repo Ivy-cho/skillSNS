@@ -9,6 +9,7 @@ Agent 오케스트레이션을 활용한 Skill SNS MSA 서비스.
 |---|---|---|
 | user-service | 8001 | 소셜 로그인 / JWT 인증 |
 | skill-service | 8002 | 스킬 관리 / AI 에이전트 대화 |
+| feed-service | 8003 | 피드 조회 (skills/users/scraps를 읽기 전용으로 조회) |
 
 ---
 
@@ -74,6 +75,13 @@ JWT_SECRET_KEY=...        # user-service와 반드시 동일한 값
 ANTHROPIC_API_KEY=...
 ```
 
+**feed-service/.env**
+```
+DATABASE_URL=postgresql+asyncpg://postgres:password@db.your-project.supabase.co:5432/postgres
+```
+user-service/skill-service와 같은 DB를 가리켜야 합니다 — feed-service는 자체 테이블 없이
+`users`/`skills`/`scraps`를 읽기 전용으로 조회만 합니다.
+
 ---
 
 ## 3. 실행
@@ -101,9 +109,10 @@ Python 3.11 이상 필요.
 ```bash
 cd user-service && pip install -r requirements.txt
 cd ../skill-service && pip install -r requirements.txt
+cd ../feed-service && pip install -r requirements.txt
 ```
 
-서버 실행 (터미널 2개):
+서버 실행 (터미널 3개):
 ```bash
 # 터미널 1
 cd user-service
@@ -112,6 +121,10 @@ python -m uvicorn main:app --port 8001
 # 터미널 2
 cd skill-service
 python run.py        # Windows는 반드시 run.py로 실행 (uvicorn 직접 실행 시 오류 발생)
+
+# 터미널 3
+cd feed-service
+python -m uvicorn main:app --port 8003
 ```
 
 ---
@@ -183,6 +196,7 @@ git push (backend 브랜치)
 |---|---|
 | http://localhost:8001 | 소셜 로그인 테스트 |
 | http://localhost:8002 | 스킬 관리 + AI 에이전트 대화 테스트 |
+| http://localhost:8003/feed | 피드 목록 (JSON, 별도 테스트 UI 없음) |
 
 **순서:**
 1. `http://localhost:8001` 접속 → Google 로그인
@@ -195,6 +209,7 @@ git push (backend 브랜치)
 |---|---|
 | http://localhost:8001/docs | user-service |
 | http://localhost:8002/docs | skill-service |
+| http://localhost:8003/docs | feed-service |
 
 ### 주요 API
 
@@ -218,6 +233,7 @@ GET    /skills/{id}/download          # MD 파일 다운로드
 POST   /chat/{skill_id}               # 새 대화 시작
 POST   /chat/{skill_id}/{session_id}  # 대화 이어가기
 GET    /chat/{skill_id}/{session_id}  # 대화 기록 조회
+GET    /chat/sessions                 # 내 대화 목록 (채팅 목록 화면)
 
 POST   /skills/create                       # 스킬 만들기 시작 (카테고리 선택)
 POST   /skills/create/{draft_id}            # 대화 이어가기 (메시지/링크/파일)
@@ -225,6 +241,22 @@ POST   /skills/create/{draft_id}/improve    # 테스트 결과 보고 개선 시
 POST   /skills/create/{draft_id}/retest     # 개선 후 재테스트
 GET    /skills/create/{draft_id}            # 진행 상황 조회
 POST   /skills/create/{draft_id}/confirm    # 확정 → 실제 스킬 등록
+```
+
+**scrap** (skill-service, prefix `/scrap`)
+```
+GET    /scrap/folders             # 내 스크랩 폴더 목록
+POST   /scrap/folders             # 폴더 생성
+PATCH  /scrap/folders/{id}        # 폴더 이름 변경
+DELETE /scrap/folders/{id}        # 폴더 삭제 (안의 스크랩도 함께)
+GET    /scrap                     # 내 스크랩 목록 (?folder_id= 필터)
+POST   /scrap                     # 담기 (이미 있으면 폴더 이동)
+DELETE /scrap/{skill_id}          # 빼기
+```
+
+**feed-service**
+```
+GET /feed    # 스킬 피드 (작성자 닉네임·스크랩 수 포함, 최신순)
 ```
 
 자세한 요청/응답 형식은 `docs/specs/skill-service.md` 참고.

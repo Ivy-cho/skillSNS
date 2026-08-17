@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -11,7 +12,13 @@ from app.agent.graph import build_agent
 from app.core.security import decode_token
 from app.db.database import get_db
 from app.models.skill import ChatSession, Skill
-from app.schemas.skill import ChatHistoryResponse, ChatRequest, ChatResponse, MessageItem
+from app.schemas.skill import (
+    ChatHistoryResponse,
+    ChatRequest,
+    ChatResponse,
+    ChatSessionSummary,
+    MessageItem,
+)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -93,7 +100,55 @@ async def continue_chat(
     result_state = await agent.ainvoke({"messages": [HumanMessage(content=body.message)]}, config)
     reply = result_state["messages"][-1].content
 
+    # 채팅 목록을 최근 대화순으로 보여주기 위한 정렬 기준 갱신.
+    session.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
     return ChatResponse(session_id=session.id, reply=reply)
+
+
+@router.get("/sessions", response_model=list[ChatSessionSummary])
+async def list_chat_sessions(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    """'내가 어떤 스킬과 대화했는지' 목록 — 채팅 목록 화면(/chats)이 쓴다."""
+    user_id = _get_user_id(credentials)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="UNAUTHORIZED")
+
+    result = await db.execute(
+        select(ChatSession, Skill.title, Skill.category)
+        .join(Skill, Skill.id == ChatSession.skill_id)
+        .where(ChatSession.user_id == user_id)
+        .order_by(ChatSession.updated_at.desc())
+    )
+    rows = result.all()
+
+    summaries = []
+    for session, skill_title, category in rows:
+        # 실제 메시지 본문은 이 테이블이 아니라 LangGraph 체크포인터에 있다 —
+        # get_chat_history와 동일한 방식으로 마지막 메시지만 꺼내온다.
+        agent = build_agent("", request.app.state.checkpointer)
+        config = {"configurable": {"thread_id": session.thread_id}}
+        state = await agent.aget_state(config)
+        last_message = ""
+        if state and state.values.get("messages"):
+            last_message = state.values["messages"][-1].content
+
+        summaries.append(
+            ChatSessionSummary(
+                skill_id=session.skill_id,
+                skill_title=skill_title,
+                category=category,
+                session_id=session.id,
+                last_message=last_message,
+                last_message_at=session.updated_at,
+            )
+        )
+
+    return summaries
 
 
 @router.get("/{skill_id}/{session_id}", response_model=ChatHistoryResponse)

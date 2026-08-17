@@ -21,6 +21,8 @@
 | 소셜 로그인 | ✅ CORS/CALLBACK_URL 배선 완료(아래 1번). naver 제거, google/kakao만 지원 |
 | 프로필 편집 | ✅ `PATCH /auth/me`, `POST /auth/me/avatar` 구현 완료(아래 3번). `PROFILE_SAVE_ENABLED=true`로 전환함 |
 | 스킬 스크랩 + 폴더 | ✅ `GET/POST/PATCH/DELETE /scrap`, `/scrap/folders` 구현 완료(아래 4번). `scrapStore.ts`가 localStorage 대신 API 호출 |
+| 피드 | ✅ 신규 feed-service(8003) `GET /feed` 구현 완료(아래 5-1번). `feedData.ts`가 mock 대신 API 호출, 트렌딩 칩도 실데이터에서 파생 |
+| 채팅 목록 | ✅ `GET /chat/sessions` 구현 완료(아래 5-2번). `chatData.ts`가 mock 대신 API 호출 |
 | 인증 | ✅ 실 로그인 세션의 access token을 그대로 사용. `NEXT_PUBLIC_DEV_TOKEN` 우회 코드는 제거됨 |
 
 ---
@@ -170,41 +172,47 @@ DELETE /scrap/{skill_id}                                  → 빼기
 
 ---
 
-## 🟡 5. 피드 · 채팅 목록 데이터 (화면은 완성, 데이터가 목업)
+## ✅ 5. 피드 · 채팅 목록 데이터 (완료, 2026-08-17)
 
-하단 네비의 **피드**와 **채팅 목록** 화면이 붙었습니다. UI·로딩·에러·빈 상태까지 다 되어 있고
-**데이터만 목업**입니다. 각각 함수 하나가 유일한 교체 지점입니다.
+하단 네비의 **피드**와 **채팅 목록** 화면이 붙었습니다. UI·로딩·에러·빈 상태까지 다 되어
+있고, 각각 함수 하나가 유일한 교체 지점입니다.
 
-### (1) 피드 — `src/components/feed/feedData.ts`의 `getFeedCards()`
-지금은 `MOCK_FEED_CARDS`를 반환합니다. 화면이 카드 하나당 쓰는 값:
+### (1) 피드 (완료, 2026-08-17) — `src/components/feed/feedData.ts`의 `getFeedCards()`
+새 **feed-service**(포트 8003)를 만들어 `GET /feed`를 실제로 호출합니다.
+`skills`/`users`/`scraps`는 셋 다 같은 Supabase Postgres 인스턴스라, feed-service가 이
+테이블들을 **읽기 전용으로 조인**해서 아래 값을 한 번에 내려줍니다(자체 테이블 없음,
+`Base.metadata.create_all` 없음 — 스키마는 절대 안 건드림):
 
-| 필드 | 지금 | 백엔드에서 받고 싶은 것 |
-|---|---|---|
-| `id`, `title` | ✅ `GET /skills`로 가능 | 그대로 |
-| `categoryId` | ⚠️ 목업 | 스킬의 카테고리 (필터 칩에 씀) |
-| `author.name` | ❌ 없음 | **스킬 만든 사람 닉네임** — 지금 `/skills`는 `user_id`만 줍니다 |
-| `comment` | ❌ 없음 | 스킬 주인이 남긴 "한마디" (한 줄 소개) |
-| `qa` | ❌ 없음 | 미리보기용 대표 질문/답변 1쌍 |
-| `scrapCount` | ❌ 없음 | 스크랩된 횟수 (4번 항목과 연결) |
+| 필드 | 상태 |
+|---|---|
+| `id`, `title`, `description`, `category` | ✅ `skills` |
+| `author_nickname` | ✅ `users` LEFT JOIN (없으면 "알 수 없음") |
+| `scrap_count` | ✅ `scraps` 집계 |
+| `qa`(대표 질문/답변) | ❌ 저장되는 데이터가 아니라 항상 빈 값. 프론트가 빈 값이면 알아서 숨김 |
 
-- **최소안**: `GET /skills`에 **작성자 닉네임**만 얹어 줘도 카드가 서게 됩니다
-  (comment·qa는 프론트에서 description으로 대체 가능).
-- **추천안**: 피드 전용 엔드포인트(예: `GET /feed`)로 위 필드를 한 번에 내려주기.
-  정렬 기준(최신순/인기순)과 페이지네이션도 이때 정해 주세요.
-- 상단 "요즘 뜨는 스킬"(`MOCK_TRENDING`)도 같은 목업입니다 — 인기 스킬 몇 개를 주면 됩니다.
+- 인증 불필요(공개 목록 — skill-service `GET /skills`와 동일 정책).
+- 정렬은 `created_at DESC`(최신순) 고정, `?limit=`만 지원(기본 50). 인기순/페이지네이션은
+  아직 없음.
+- 상단 "요즘 뜨는 스킬"은 별도 API 없이 `feedData.ts`의 `toTrending()`이 이미 불러온
+  카드 중 상위 4개를 뽑아 만듭니다. **정렬 규칙(2026-08-17 확정): 조회수 내림차순,
+  조회수가 같으면 스킬 이름 오름차순(가나다순)**. 더 정교한 랭킹(기간별 인기 등)이
+  필요해지면 그때 `/feed/trending` 같은 전용 엔드포인트를 고려하면 됩니다.
+  - 조회수는 skill-service `skills.view_count` 컬럼 — `GET /skills/{id}`(상세 조회 = 열람)
+    호출마다 1씩 늘어납니다. feed-service가 이 컬럼을 그대로 `view_count`로 내려줍니다.
 
-### (2) 채팅 목록 — `src/components/chat_list/chatData.ts`의 `getChats()`
-지금은 `MOCK_CONVERSATIONS`를 반환합니다. **"내가 어떤 스킬과 대화했는지" 목록 API가 없습니다.**
+### (2) 채팅 목록 (완료, 2026-08-17) — `src/components/chat_list/chatData.ts`의 `getChats()`
+skill-service에 `GET /chat/sessions`를 추가해 실제로 호출합니다.
 
 ```
-GET /chat/sessions            (이름은 편한 대로)
+GET /chat/sessions
 Authorization: Bearer <access_token>
-→ [{ skill_id, skill_title, last_message, last_message_at, summary? }]
+→ [{ skill_id, skill_title, category, session_id, last_message, last_message_at }]
 ```
-프론트가 쓰는 모양은 `Conversation`(`chat_list/types.ts`):
-`id`(=스킬 id, 탭하면 `/skill/{id}`로 이동) · `skillName` · `avatar` · `summary` · `lastMessage` · `timeLabel`
-- `summary`는 없으면 생략 가능(프론트에서 마지막 메시지로 대체).
-- `timeLabel`("어제", "3일 전")은 프론트에서 만들 테니 **ISO 시각**만 주세요.
+`ChatSession`에 `updated_at` 컬럼을 추가해 메시지가 오갈 때마다 갱신(정렬 기준으로 씀).
+`last_message`는 이 테이블이 아니라 LangGraph 체크포인터에서 `get_chat_history`와 동일한
+방식으로 꺼내옵니다. `summary`는 만들지 않음 — 프론트가 `Conversation.summary`를 빈
+문자열로 두면 `ChatListItem`이 알아서 그 줄을 숨기고 마지막 메시지만 보여줍니다.
+`avatar`는 `category`를 skill-creator `CATEGORIES`의 이모지로 매핑해서 프론트가 만듭니다.
 
 ## 🟢 6. 스킬 만들기 파이프라인 관련
 

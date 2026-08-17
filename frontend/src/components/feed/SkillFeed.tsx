@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FeedCard } from "./FeedCard";
-import { getFeedCards, MOCK_TRENDING } from "./feedData";
+import { getFeedCards, toTrending } from "./feedData";
 import type { FeedCard as FeedCardData } from "./types";
 
 export function SkillFeed() {
@@ -29,6 +29,7 @@ export function SkillFeed() {
   }, []);
 
   const visibleCards = cards ?? [];
+  const trending = toTrending(visibleCards);
 
   return (
     // 폰 프레임(테두리·높이·라운드)은 (main)/layout.tsx가 감싸주므로 여기선 내용만 채운다.
@@ -45,11 +46,12 @@ export function SkillFeed() {
           <span className="text-[0.78rem] text-muted">어떤 고민이 있으세요?</span>
         </div>
 
-        {/* 요즘 뜨는 스킬 (가로 스크롤, 목업) */}
+        {/* 요즘 뜨는 스킬 (가로 스크롤) — 불러온 카드 중 스크랩 많은 순 상위 4개 */}
+        {trending.length > 0 && (
         <section className="flex shrink-0 flex-col gap-1.5">
           <h2 className="text-[0.72rem] font-semibold text-muted">요즘 뜨는 스킬 🔥</h2>
           <div className="-mx-3.5 flex gap-2 overflow-x-auto px-3.5 pb-1">
-            {MOCK_TRENDING.map((item, index) => (
+            {trending.map((item, index) => (
               <div
                 key={item.id}
                 className={`flex w-[92px] shrink-0 flex-col items-center gap-1 rounded-[12px] border-[1.5px] p-2.5 ${
@@ -67,6 +69,7 @@ export function SkillFeed() {
             ))}
           </div>
         </section>
+        )}
 
         {/* 피드 카드: 에러 → 로딩 → 빈 상태 → 목록 순으로 구분해 렌더 */}
         {loadError ? (

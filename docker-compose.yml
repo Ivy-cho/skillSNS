@@ -17,17 +17,28 @@ services:
     networks:
       - skillsns-network
 
+  feed-service:
+    build: ./feed-service
+    ports:
+      - "8003:8003"
+    env_file:
+      - ./feed-service/.env
+    networks:
+      - skillsns-network
+
   frontend:
     build:
       context: ./frontend
       args:
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8002}
         NEXT_PUBLIC_USER_SERVICE_URL: ${NEXT_PUBLIC_USER_SERVICE_URL:-http://localhost:8001}
+        NEXT_PUBLIC_FEED_SERVICE_URL: ${NEXT_PUBLIC_FEED_SERVICE_URL:-http://localhost:8003}
     ports:
       - "3000:3000"
     depends_on:
       - skill-service
       - user-service
+      - feed-service
     networks:
       - skillsns-network
 

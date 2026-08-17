@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -23,6 +24,20 @@ from app.db.database import Base, engine
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Base.metadata.create_all은 없는 테이블만 만들고 기존 테이블에 컬럼을 추가하진
+        # 않는다 — 채팅 목록 정렬용으로 새로 추가한 컬럼이라 직접 얹는다.
+        await conn.execute(
+            text(
+                "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS "
+                "updated_at TIMESTAMPTZ NOT NULL DEFAULT now()"
+            )
+        )
+        await conn.execute(
+            text(
+                "ALTER TABLE skills ADD COLUMN IF NOT EXISTS "
+                "view_count INTEGER NOT NULL DEFAULT 0"
+            )
+        )
 
     # AsyncPostgresSaver.from_conn_string()은 커넥션 하나를 앱 수명 내내 물고 있어서,
     # Supabase 쪽 유휴 타임아웃에 걸려 끊기면 재연결 없이 계속 에러를 낸다(연결이 죽어도

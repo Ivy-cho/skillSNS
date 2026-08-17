@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +21,9 @@ class Skill(Base):
     # 지금 규모에선 FK로 강제하는 게 오히려 과설계다. feed-service의 카테고리별 조회는
     # 이 문자열 컬럼으로 필터링하면 된다.
     category: Mapped[str] = mapped_column(String(50), nullable=False)
+    # 피드 "요즘 뜨는 스킬" 정렬 기준. GET /skills/{id}(상세 조회=열람)마다 1씩 늘어난다.
+    # Core update()로만 건드려서 updated_at(onupdate)이 조회만으로 같이 바뀌지 않게 한다.
+    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -42,6 +45,13 @@ class ChatSession(Base):
     thread_id: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    # 채팅 목록을 최근 대화순으로 정렬하기 위한 값 — 메시지가 오갈 때마다 라우트에서 갱신한다.
+    # (실제 메시지 본문은 이 테이블이 아니라 LangGraph 체크포인터에 있어 여기엔 시각만 둔다.)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
 

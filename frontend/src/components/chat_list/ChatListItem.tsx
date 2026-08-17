@@ -21,7 +21,7 @@ export function ChatListItem({ chat }: { chat: Conversation }) {
             {chat.timeLabel}
           </span>
         </div>
-        <p className="truncate text-[0.72rem] text-muted">{chat.summary}</p>
+        {chat.summary && <p className="truncate text-[0.72rem] text-muted">{chat.summary}</p>}
         <p className="truncate text-[0.75rem] text-ink">“{chat.lastMessage}”</p>
       </div>
     </Link>

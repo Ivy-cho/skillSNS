@@ -52,5 +52,14 @@ class ChatHistoryResponse(BaseModel):
     messages: list[MessageItem]
 
 
+class ChatSessionSummary(BaseModel):
+    skill_id: str
+    skill_title: str
+    category: str
+    session_id: str
+    last_message: str
+    last_message_at: datetime
+
+
 class MessageResponse(BaseModel):
     message: str

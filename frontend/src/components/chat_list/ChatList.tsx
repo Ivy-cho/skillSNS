@@ -10,7 +10,7 @@ export function ChatList() {
   const [chats, setChats] = useState<Conversation[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // 마운트 시 대화 목록 로드 (지금은 목업, 백엔드 목록 API 생기면 getChats 내부만 교체).
+  // 마운트 시 대화 목록 로드.
   useEffect(() => {
     let cancelled = false;
     getChats()

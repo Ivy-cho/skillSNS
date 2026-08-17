@@ -13,6 +13,7 @@ export type FeedCard = {
   comment: string; // 스킬 주인 "한마디"
   qa: { q: string; a: string }; // 미리보기 Q&A
   scrapCount: number;
+  viewCount: number; // 트렌딩 정렬 1순위(조회수)
 };
 
 export type TrendingItem = {

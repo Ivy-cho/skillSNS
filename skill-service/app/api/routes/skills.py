@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_token
@@ -77,6 +77,13 @@ async def get_skill(
     skill = result.scalar_one_or_none()
     if not skill:
         raise HTTPException(status_code=404, detail="SKILL_NOT_FOUND")
+
+    # 상세 조회 = 열람으로 집계. Core update()로만 건드려서 updated_at(onupdate)이
+    # 조회만으로 같이 바뀌지 않게 한다.
+    await db.execute(
+        update(Skill).where(Skill.id == skill_id).values(view_count=Skill.view_count + 1)
+    )
+    await db.commit()
     return skill
 
 

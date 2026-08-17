@@ -15,9 +15,8 @@ import {
 const NICKNAME_MAX = 20;
 const BIO_MAX = 80;
 
-// user-service에 PATCH /auth/me 와 bio/avatar_url 컬럼이 생기면 true로 바꾼다.
-// 그전까지는 저장이 실패할 게 뻔하므로 호출하지 않고 안내만 띄운다. (BACKEND_HANDOFF.md)
-const PROFILE_SAVE_ENABLED = false;
+// user-service에 PATCH /auth/me, POST /auth/me/avatar, bio/avatar_url 컬럼이 붙어서 true로 전환.
+const PROFILE_SAVE_ENABLED = true;
 
 export default function ProfileEditPage() {
   const router = useRouter();

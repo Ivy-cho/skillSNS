@@ -18,11 +18,13 @@
 | 스킬로 대화하기 | ✅ `GET /skills/{id}` + `POST /chat/{id}` — `/skill/[id]` 화면 |
 | 스킬 직접 등록 | ✅ `POST /skills` — "내 스킬 넣기"(`/skill/new`). 넣은 프롬프트가 `md_content`로 저장돼 그대로 대화에 쓰입니다. **추가 작업 없음** |
 | 스킬 삭제 | ✅ `DELETE /skills/{id}` — 내 스킬 목록에서 스와이프(터치)/호버(마우스) → 삭제. **추가 작업 없음** |
-| 인증 | ⚠️ `NEXT_PUBLIC_DEV_TOKEN`(로컬 서명 토큰)으로 우회 중. 아래 1번이 열리면 제거 예정 |
+| 소셜 로그인 | ✅ CORS/CALLBACK_URL 배선 완료(아래 1번). naver 제거, google/kakao만 지원 |
+| 프로필 편집 | ✅ `PATCH /auth/me`, `POST /auth/me/avatar` 구현 완료(아래 3번). `PROFILE_SAVE_ENABLED=true`로 전환함 |
+| 인증 | ⚠️ `NEXT_PUBLIC_DEV_TOKEN`(로컬 서명 토큰)으로 우회 중 — user-service 토큰을 skill-service가 그대로 검증 가능한지는 아직 미확인(1번 "같이 확인해 주세요" 참고) |
 
 ---
 
-## 🔴 1. 소셜 로그인 — 설정 2가지 (가장 급함)
+## ✅ 1. 소셜 로그인 — 설정 2가지 (완료, 2026-08-17)
 
 **이게 막혀서 앱에 정상 진입이 안 됩니다.** user-service의 기존 계약
 (`/auth/login/{provider}` → `login_url`, `/auth/callback?code=` → `TokenResponse`)은
@@ -66,7 +68,7 @@ No 'Access-Control-Allow-Origin' header is present
 
 ---
 
-## 🔴 2. skill-service가 유휴 상태 후 DB 연결이 끊깁니다 (개발 계속 막힘)
+## ✅ 2. skill-service가 유휴 상태 후 DB 연결이 끊깁니다 (완료, 2026-08-17)
 
 **증상**: 컨테이너를 띄워 둔 채 몇 시간 지나면, 이후 모든 요청이 500이 됩니다.
 프론트 화면에는 그냥 "failed to fetch"로만 보여서 원인을 찾기 어렵습니다.
@@ -86,27 +88,26 @@ psycopg.OperationalError: the connection is closed
 langgraph의 Postgres 체크포인터가 들고 있는 커넥션이 끊긴 뒤 재연결되지 않는 것으로 보입니다.
 (Supabase 쪽 유휴 타임아웃에 걸리는 것 같습니다.)
 
-**요청**: 커넥션 풀에 **pre-ping / 자동 재연결**을 걸어 주세요. 예를 들어
-- SQLAlchemy 엔진: `pool_pre_ping=True`, `pool_recycle=<타임아웃보다 짧게>`
-- langgraph `AsyncPostgresSaver`가 쓰는 psycopg 풀에도 동일하게 재연결 옵션 적용
-
-**현재 우회법**: `docker restart skillsns-team-skill-service-1`
-확인은 헬스체크가 아니라 **실제 DB를 타는 요청**으로 해야 합니다:
-```bash
-curl -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8002/skills/create \
-  -H "Authorization: Bearer $DEV_TOKEN" -F "category=여러 분야"
-```
+**해결**: `skill-service/main.py`에서 `AsyncPostgresSaver.from_conn_string()`(커넥션 하나를
+앱 수명 내내 재사용) 대신 `psycopg_pool.AsyncConnectionPool(check=check_connection)`로
+체크포인터를 만들도록 교체. 매 체크아웃마다 살아있는지 확인하고, 죽은 커넥션은 자동
+재생성됨. `pg_terminate_backend`로 커넥션을 강제 종료한 뒤 다음 요청이 에러 없이 재연결되는
+것으로 검증함. (SQLAlchemy 엔진 쪽은 이미 `NullPool`이라 애초에 이 문제에 해당 안 됨.)
 
 ---
 
-## 🟡 3. 프로필 편집 (사진 / 닉네임 / 소개글)
+## ✅ 3. 프로필 편집 (사진 / 닉네임 / 소개글) (완료, 2026-08-17)
 
 **프론트 상태**: 내 홈(`/home`)과 프로필 편집 화면(`/profile/edit`) 완성. 사진 미리보기,
 글자수 제한, 저장 버튼까지 동작합니다. 클라이언트 함수도 준비됨
 (`authClient.ts`의 `updateProfile` / `uploadAvatar`).
 
-**붙이는 법**: `src/app/profile/edit/page.tsx`의 `PROFILE_SAVE_ENABLED`(현재 `false`)를
-`true`로만 바꾸면 됩니다.
+**붙이는 법**: `src/app/profile/edit/page.tsx`의 `PROFILE_SAVE_ENABLED`를 `true`로 전환 완료.
+
+**해결**: `users` 테이블에 `bio`/`avatar_url` 컬럼 추가, `PATCH /auth/me`(부분 수정),
+`POST /auth/me/avatar`(Supabase Storage `avatars` 버킷, public, 5MB 제한, jpeg/png/webp/gif만
+허용) 구현. 버킷은 앱 기동 시 없으면 자동 생성. 실제 계정으로 GET/PATCH/업로드까지
+전부 end-to-end 테스트 완료.
 
 ### (1) users 테이블 컬럼 추가
 - `bio` (text, nullable) — 소개글. 프론트에서 80자로 제한해 보냅니다.
@@ -132,7 +133,7 @@ Content-Type: multipart/form-data
   file=<이미지 파일>
 → 200 { "avatar_url": "https://…" }
 ```
-- 저장 위치(Supabase Storage 등), 허용 용량·확장자는 백엔드 판단에 맡깁니다.
+- 저장 위치: Supabase Storage `avatars` 버킷(public), 5MB 제한, jpeg/png/webp/gif만 허용.
 - 프론트는 `uploadAvatar` → 받은 URL을 `PATCH /auth/me`에 실어 보내는 순서로 호출합니다.
 
 ---

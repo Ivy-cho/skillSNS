@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LoginUrlResponse(BaseModel):
@@ -13,6 +13,18 @@ class UserInfo(BaseModel):
     nickname: str
     provider: str
     created_at: datetime
+    bio: str | None = None
+    avatar_url: str | None = None
+
+
+class ProfilePatch(BaseModel):
+    nickname: str | None = Field(default=None, min_length=1, max_length=20)
+    bio: str | None = Field(default=None, max_length=80)
+    avatar_url: str | None = None
+
+
+class AvatarUploadResponse(BaseModel):
+    avatar_url: str
 
 
 class TokenResponse(BaseModel):

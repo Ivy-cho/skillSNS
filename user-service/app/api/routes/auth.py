@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,8 +12,10 @@ from app.db.database import get_db
 from app.models.user import RefreshToken, User
 from app.schemas.auth import (
     AccessTokenResponse,
+    AvatarUploadResponse,
     LoginUrlResponse,
     MessageResponse,
+    ProfilePatch,
     RefreshRequest,
     TokenResponse,
     UserInfo,
@@ -23,8 +25,45 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 bearer_scheme = HTTPBearer()
 
 SUPPORTED_PROVIDERS = {"google", "kakao"}
+AVATAR_BUCKET = "avatars"
+AVATAR_EXT_BY_CONTENT_TYPE = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+MAX_AVATAR_SIZE = 5 * 1024 * 1024
 
+# 소셜 로그인(OAuth) 흐름은 유저 권한만 필요해 anon 키로 충분하다.
 supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
+# 아바타 업로드는 우리 JWT로 이미 인증을 마친 뒤 서버가 대신 올리는 것이라, Storage RLS를
+# 우회할 수 있는 service-role 키를 쓴다 (Supabase 세션이 없어 anon 키로는 막힘).
+supabase_admin = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+
+
+def _to_user_info(user: User) -> UserInfo:
+    return UserInfo(
+        id=user.id,
+        email=user.email,
+        nickname=user.nickname,
+        provider=user.provider,
+        created_at=user.created_at,
+        bio=user.bio,
+        avatar_url=user.avatar_url,
+    )
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    payload = decode_token(credentials.credentials)
+
+    if not payload or payload.get("type") != "access":
+        raise HTTPException(status_code=401, detail="UNAUTHORIZED")
+
+    result = await db.execute(select(User).where(User.id == payload.get("sub")))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="USER_NOT_FOUND")
+
+    return user
 
 
 @router.get("/login/{provider}", response_model=LoginUrlResponse)
@@ -93,40 +132,53 @@ async def auth_callback(code: str, db: AsyncSession = Depends(get_db)):
         access_token=access_token,
         refresh_token=refresh_token_str,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=UserInfo(
-            id=user.id,
-            email=user.email,
-            nickname=user.nickname,
-            provider=user.provider,
-            created_at=user.created_at,
-        ),
+        user=_to_user_info(user),
     )
 
 
 @router.get("/me", response_model=UserInfo)
-async def get_me(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+async def get_me(user: User = Depends(get_current_user)):
+    return _to_user_info(user)
+
+
+@router.patch("/me", response_model=UserInfo)
+async def update_profile(
+    patch: ProfilePatch,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    payload = decode_token(credentials.credentials)
+    for field, value in patch.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
 
-    if not payload or payload.get("type") != "access":
-        raise HTTPException(status_code=401, detail="UNAUTHORIZED")
+    await db.commit()
+    await db.refresh(user)
 
-    user_id = payload.get("sub")
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    return _to_user_info(user)
 
-    if not user:
-        raise HTTPException(status_code=404, detail="USER_NOT_FOUND")
 
-    return UserInfo(
-        id=user.id,
-        email=user.email,
-        nickname=user.nickname,
-        provider=user.provider,
-        created_at=user.created_at,
-    )
+@router.post("/me/avatar", response_model=AvatarUploadResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+):
+    ext = AVATAR_EXT_BY_CONTENT_TYPE.get(file.content_type or "")
+    if not ext:
+        raise HTTPException(status_code=400, detail="INVALID_FILE_TYPE")
+
+    content = await file.read()
+    if len(content) > MAX_AVATAR_SIZE:
+        raise HTTPException(status_code=400, detail="FILE_TOO_LARGE")
+
+    path = f"{user.id}.{ext}"
+    try:
+        supabase_admin.storage.from_(AVATAR_BUCKET).upload(
+            path, content, file_options={"content-type": file.content_type, "upsert": "true"}
+        )
+    except Exception:
+        raise HTTPException(status_code=500, detail="AVATAR_UPLOAD_FAILED")
+
+    avatar_url = supabase_admin.storage.from_(AVATAR_BUCKET).get_public_url(path)
+    return AvatarUploadResponse(avatar_url=avatar_url)
 
 
 @router.post("/refresh", response_model=AccessTokenResponse)

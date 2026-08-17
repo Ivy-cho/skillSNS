@@ -17,17 +17,57 @@
 | 스킬 목록 | ✅ `GET /skills?user_id=` — 내 홈의 "내 스킬" 탭 |
 | 스킬로 대화하기 | ✅ `GET /skills/{id}` + `POST /chat/{id}` — `/skill/[id]` 화면 |
 | 스킬 직접 등록 | ✅ `POST /skills` — "내 스킬 넣기"(`/skill/new`). 넣은 프롬프트가 `md_content`로 저장돼 그대로 대화에 쓰입니다. **추가 작업 없음** |
-| 스킬 삭제 | ✅ `DELETE /skills/{id}` — 내 스킬 목록에서 스와이프(터치)/호버(마우스) → 삭제. **추가 작업 없음** |
+| 스킬 삭제 | ✅ `DELETE /skills/{id}` — 내 스킬 목록에서 왼쪽으로 끌면(터치 스와이프 / 마우스 클릭-드래그) 삭제 버튼 노출. **추가 작업 없음** |
 | 소셜 로그인 | ✅ CORS/CALLBACK_URL 배선 완료(아래 1번). naver 제거, google/kakao만 지원 |
 | 프로필 편집 | ✅ `PATCH /auth/me`, `POST /auth/me/avatar` 구현 완료(아래 3번). `PROFILE_SAVE_ENABLED=true`로 전환함 |
 | 스킬 스크랩 + 폴더 | ✅ `GET/POST/PATCH/DELETE /scrap`, `/scrap/folders` 구현 완료(아래 4번). `scrapStore.ts`가 localStorage 대신 API 호출 |
 | 피드 | ✅ 신규 feed-service(8003) `GET /feed` 구현 완료(아래 5-1번). `feedData.ts`가 mock 대신 API 호출, 트렌딩 칩도 실데이터에서 파생 |
 | 채팅 목록 | ✅ `GET /chat/sessions` 구현 완료(아래 5-2번). `chatData.ts`가 mock 대신 API 호출 |
+| 피드 검색 | ⚠️ 프론트에서 불러온 피드 카드 안에서 걸러내는 방식(제목·소개·작성자·카테고리). 스킬이 많아지면 서버 검색 필요 — 아래 항목 참고 |
 | 인증 | ✅ 실 로그인 세션의 access token을 그대로 사용. `NEXT_PUBLIC_DEV_TOKEN` 우회 코드는 제거됨 |
 
 ---
 
-## ✅ 1. 소셜 로그인 — 설정 2가지 (완료, 2026-08-17)
+## 🔴 카카오 로그인만 실패합니다 (구글은 정상) — 설정 확인 요청
+
+**증상**: 로그인 화면에서 카카오를 누르면 카카오 로그인 화면까지는 뜨는데, 그 뒤로 우리 앱에
+돌아오지 못합니다. **구글은 같은 경로로 정상 동작**합니다(실제 로그인 성공, 그 계정으로
+스킬 생성·프로필 수정까지 확인).
+
+**확인한 사실 — 프론트/CORS/콜백 배선 문제는 아닙니다.**
+user-service 로그를 보면 카카오는 **콜백이 아예 호출되지 않습니다**:
+```
+GET /auth/login/kakao    200 OK      ← 로그인 URL 발급은 됨
+GET /auth/login/google   200 OK
+GET /auth/callback?code= 200 OK      ← 구글만 돌아옴
+```
+즉 실패 지점이 **카카오 개발자센터 또는 Supabase 쪽 설정**입니다.
+
+**브라우저에서 확인한 실제 카카오 요청 값**
+```
+client_id     = c9f747a17663cf56959a0eb2a484ae8e
+scope         = account_email profile_image profile_nickname
+redirect_uri  = https://twumveupobzimkkiqlim.supabase.co/auth/v1/callback
+```
+
+**확인 부탁드릴 곳** (카카오 개발자센터 → 내 애플리케이션)
+1. **동의항목** — Supabase가 `account_email`을 요구합니다. 카카오는 이메일 수집에 동의항목
+   활성화(경우에 따라 비즈 앱 등록)가 필요합니다. [카카오 로그인 → 동의항목]의
+   **카카오계정(이메일)** 상태 확인. ← 가장 의심되는 지점
+2. **Redirect URI** — [카카오 로그인 → Redirect URI]에 위 `redirect_uri`
+   (`https://…supabase.co/auth/v1/callback`)가 등록돼 있는지.
+3. **카카오 로그인 활성화** 스위치 ON 여부.
+4. Supabase 대시보드 → Authentication → Providers → Kakao의 client id/secret.
+
+카카오 화면에 뜨는 **에러 코드(KOE___)** 를 알려주시면 원인을 더 좁힐 수 있습니다
+(KOE006=Redirect URI 미등록 / 동의항목 관련 / KOE101·KOE004=앱 설정).
+
+**프론트는 별도 작업이 없습니다** — 설정이 맞춰지면 구글과 동일한 경로로 동작합니다.
+(카카오가 계속 막히면 로그인 화면에서 카카오 버튼을 잠시 감추는 것도 방법입니다 — 원하시면 말씀해 주세요.)
+
+---
+
+## ✅ 1. 소셜 로그인 — 설정 2가지 (완료, 2026-08-17 · 단 카카오는 위 항목 참고)
 
 **이게 막혀서 앱에 정상 진입이 안 됩니다.** user-service의 기존 계약
 (`/auth/login/{provider}` → `login_url`, `/auth/callback?code=` → `TokenResponse`)은
@@ -265,5 +305,9 @@ stage로 되돌림 → 그 stage의 **시작 상태**(안내/질문 메시지 �
 
 - **파일 첨부** — `AttachModal`에서 고른 파일이 `continueDraft`로 전송되고 백엔드가 텍스트를
   추출하지만, 첨부 UX(진행 표시, 실패 처리)는 다듬을 여지가 있습니다.
+- **피드 검색 API** — 피드의 "어떤 고민이 있으세요?" 검색은 지금 **이미 불러온 카드 안에서만**
+  걸러냅니다(`SkillFeed.tsx`의 `matches()`). 스킬이 수백 건으로 늘면 전체를 받아올 수 없으니
+  서버 검색이 필요합니다. 예: `GET /feed?q=<검색어>` — 제목·소개·작성자·카테고리를 대상으로,
+  페이지네이션과 함께. 급하지 않지만 데이터가 늘기 전에 정해두면 좋습니다.
 - **피드 정렬 기준** — 위 5번에서 API를 정할 때, 피드를 무엇으로 채울지도 정해야 합니다
   (전체 스킬 최신순 / 인기순 / 나중에 팔로우 기반).

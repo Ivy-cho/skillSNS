@@ -127,49 +127,9 @@ export function hasSession(): boolean {
   return getStoredUser() !== null;
 }
 
-// 데이터를 불러올 때 쓸 사용자 id. 세션이 있으면 그 값, 없으면 개발용 토큰의 sub.
-// 로그인 연동이 열리면 이 폴백은 제거한다.
+// 데이터를 불러올 때 쓸 사용자 id. 세션이 있을 때만 값이 있다.
 export function getCurrentUserId(): string | null {
-  const user = getStoredUser();
-  if (user) return user.id;
-  return readDevTokenPayload()?.sub ?? null;
-}
-
-function readDevTokenPayload(): { sub?: string; email?: string } | null {
-  const devToken = process.env.NEXT_PUBLIC_DEV_TOKEN;
-  if (!devToken) return null;
-  try {
-    return JSON.parse(atob(devToken.split(".")[1]));
-  } catch {
-    return null;
-  }
-}
-
-// [임시] 개발용 로그인 — 소셜 로그인이 백엔드(CORS/CALLBACK_URL) 때문에 아직 안 되는 동안
-// 로그인 화면을 첫 화면으로 두면서도 뒤쪽 화면을 개발·확인할 수 있게 하는 우회로.
-// 개발 토큰이 있을 때만 동작하며, 실제 로그인이 열리면 이 함수와 버튼을 함께 제거한다.
-export function isDevLoginAvailable(): boolean {
-  return readDevTokenPayload()?.sub != null;
-}
-
-export function startDevSession(): boolean {
-  const payload = readDevTokenPayload();
-  const devToken = process.env.NEXT_PUBLIC_DEV_TOKEN;
-  if (!payload?.sub || !devToken) return false;
-  saveSession({
-    access_token: devToken,
-    refresh_token: "",
-    token_type: "bearer",
-    expires_in: 0,
-    user: {
-      id: payload.sub,
-      email: payload.email ?? "",
-      nickname: "개발자",
-      provider: "dev",
-      created_at: new Date().toISOString(),
-    },
-  });
-  return true;
+  return getStoredUser()?.id ?? null;
 }
 
 export function clearSession() {

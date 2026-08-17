@@ -23,15 +23,19 @@ export function ScrapButton({ skillId }: { skillId: string }) {
   const scrapped = Boolean(current);
 
   function pick(folderId: string) {
-    addScrap(skillId, folderId);
+    addScrap(skillId, folderId).catch(() => {});
     setOpen(false);
   }
 
-  function handleCreateAndPick() {
+  async function handleCreateAndPick() {
     const name = newName.trim();
     if (!name) return;
-    const folder = createFolder(name);
-    addScrap(skillId, folder.id);
+    try {
+      const folder = await createFolder(name);
+      await addScrap(skillId, folder.id);
+    } catch {
+      // 실패 시 scrapStore가 낙관적 갱신을 자동으로 되돌린다.
+    }
     setNewName("");
     setOpen(false);
   }

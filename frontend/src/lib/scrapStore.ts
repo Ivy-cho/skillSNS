@@ -1,12 +1,16 @@
 // 스크랩 폴더와 담긴 스킬을 보관하는 곳.
 //
-// [백엔드 미구현] skill-service/user-service 어디에도 스크랩·폴더 기능이 없어서, 우선
-// 브라우저(localStorage)에 저장한다. 화면 쪽은 이 파일의 함수만 쓰므로, 백엔드 API가
-// 생기면 이 파일의 구현만 fetch 호출로 바꾸면 된다. (계약: BACKEND_HANDOFF.md)
+// skill-service의 /scrap, /scrap/folders API와 연동한다 (계약: BACKEND_HANDOFF.md).
+// 화면은 이 파일의 함수만 쓴다. 네트워크 왕복을 기다리지 않도록 로컬 캐시를 먼저
+// 낙관적으로 갱신하고 백엔드 호출은 뒤에서 진행한다 — 실패하면 캐시를 되돌린다.
 //
-// React에서 읽을 땐 useSyncExternalStore를 쓴다 — 서버 렌더에선 빈 목록, 클라이언트에서
-// 실제 값으로 다시 렌더돼 hydration 불일치가 없다. 그래서 스냅샷은 같은 참조를 유지하도록
+// React에서 읽을 땐 useSyncExternalStore를 쓴다. 서버 렌더에선 빈 목록, 클라이언트에서
+// 백엔드 응답이 도착하면 다시 렌더돼 최신 값으로 바뀐다. 스냅샷은 같은 참조를 유지하도록
 // 캐시해 둔다(매번 새 배열을 주면 무한 렌더가 된다).
+
+import { getAccessToken } from "@/lib/authClient";
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
 
 export type ScrapFolder = {
   id: string;
@@ -20,8 +24,8 @@ export type Scrap = {
   addedAt: string;
 };
 
-const FOLDER_KEY = "skillsns.scrapFolders";
-const SCRAP_KEY = "skillsns.scraps";
+type FolderDTO = { id: string; name: string; created_at: string; skill_count: number };
+type ScrapDTO = { skill_id: string; folder_id: string; added_at: string };
 
 const EMPTY_FOLDERS: ScrapFolder[] = [];
 const EMPTY_SCRAPS: Scrap[] = [];
@@ -29,37 +33,63 @@ const EMPTY_SCRAPS: Scrap[] = [];
 let folderCache: ScrapFolder[] = EMPTY_FOLDERS;
 let scrapCache: Scrap[] = EMPTY_SCRAPS;
 let loaded = false;
+let loading: Promise<void> | null = null;
 
 const listeners = new Set<() => void>();
 
-function read<T>(key: string, fallback: T[]): T[] {
-  if (typeof window === "undefined") return fallback;
+function notify() {
+  listeners.forEach((l) => l());
+}
+
+function setFolders(folders: ScrapFolder[]) {
+  folderCache = folders;
+  notify();
+}
+
+function setScraps(scraps: Scrap[]) {
+  scrapCache = scraps;
+  notify();
+}
+
+async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
+  const token = getAccessToken();
+  const res = await fetch(`${BACKEND_URL}${path}`, {
+    ...init,
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init?.headers ?? {}) },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail ?? `요청이 실패했어요 (${res.status})`);
+  }
+  return res;
+}
+
+async function load() {
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T[]) : fallback;
+    const [folderRes, scrapRes] = await Promise.all([
+      authedFetch("/scrap/folders"),
+      authedFetch("/scrap"),
+    ]);
+    const folders: FolderDTO[] = await folderRes.json();
+    const scraps: ScrapDTO[] = await scrapRes.json();
+    folderCache = folders.map((f) => ({ id: f.id, name: f.name, createdAt: f.created_at }));
+    scrapCache = scraps.map((s) => ({ skillId: s.skill_id, folderId: s.folder_id, addedAt: s.added_at }));
+    loaded = true;
+    notify();
   } catch {
-    return fallback;
+    // 조회 실패 — loaded를 세우지 않아 다음 subscribe/getSnapshot에서 재시도된다.
   }
 }
 
 function ensureLoaded() {
-  if (loaded || typeof window === "undefined") return;
-  folderCache = read(FOLDER_KEY, EMPTY_FOLDERS);
-  scrapCache = read(SCRAP_KEY, EMPTY_SCRAPS);
-  loaded = true;
-}
-
-function commit(folders: ScrapFolder[], scraps: Scrap[]) {
-  folderCache = folders;
-  scrapCache = scraps;
-  if (typeof window !== "undefined") {
-    localStorage.setItem(FOLDER_KEY, JSON.stringify(folders));
-    localStorage.setItem(SCRAP_KEY, JSON.stringify(scraps));
-  }
-  listeners.forEach((l) => l());
+  if (loaded || loading || typeof window === "undefined") return;
+  loading = load().finally(() => {
+    loading = null;
+  });
 }
 
 export function subscribeScraps(cb: () => void) {
+  ensureLoaded();
   listeners.add(cb);
   return () => {
     listeners.delete(cb);
@@ -78,51 +108,89 @@ export function getScrapsSnapshot(): Scrap[] {
 export const getEmptyFolders = () => EMPTY_FOLDERS;
 export const getEmptyScraps = () => EMPTY_SCRAPS;
 
-function newId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function tempId() {
+  return `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // ---- 폴더 ----
-export function createFolder(name: string): ScrapFolder {
-  ensureLoaded();
-  const folder: ScrapFolder = {
-    id: newId(),
-    name: name.trim(),
-    createdAt: new Date().toISOString(),
-  };
-  commit([...folderCache, folder], scrapCache);
-  return folder;
+// 실제 id는 서버 응답으로 확정된다 — 반환된 폴더를 곧바로 addScrap에 넘겨도 되도록
+// (호출부가 await 하는 한) 낙관적 임시 id가 새어나가지 않는다.
+export async function createFolder(name: string): Promise<ScrapFolder> {
+  const trimmed = name.trim();
+  const optimistic: ScrapFolder = { id: tempId(), name: trimmed, createdAt: new Date().toISOString() };
+  setFolders([...folderCache, optimistic]);
+  try {
+    const res = await authedFetch("/scrap/folders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    const dto: FolderDTO = await res.json();
+    const real: ScrapFolder = { id: dto.id, name: dto.name, createdAt: dto.created_at };
+    setFolders(folderCache.map((f) => (f.id === optimistic.id ? real : f)));
+    return real;
+  } catch (err) {
+    setFolders(folderCache.filter((f) => f.id !== optimistic.id));
+    throw err;
+  }
 }
 
-export function renameFolder(id: string, name: string) {
-  ensureLoaded();
-  commit(
-    folderCache.map((f) => (f.id === id ? { ...f, name: name.trim() } : f)),
-    scrapCache
-  );
+export async function renameFolder(id: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  const before = folderCache;
+  setFolders(folderCache.map((f) => (f.id === id ? { ...f, name: trimmed } : f)));
+  try {
+    await authedFetch(`/scrap/folders/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+  } catch (err) {
+    setFolders(before);
+    throw err;
+  }
 }
 
-// 폴더를 지우면 그 안의 스크랩도 함께 정리한다.
-export function deleteFolder(id: string) {
-  ensureLoaded();
-  commit(
-    folderCache.filter((f) => f.id !== id),
-    scrapCache.filter((s) => s.folderId !== id)
-  );
+// 폴더를 지우면 그 안의 스크랩도 함께 정리한다 (백엔드도 cascade로 동일하게 처리).
+export async function deleteFolder(id: string): Promise<void> {
+  const beforeFolders = folderCache;
+  const beforeScraps = scrapCache;
+  setFolders(folderCache.filter((f) => f.id !== id));
+  setScraps(scrapCache.filter((s) => s.folderId !== id));
+  try {
+    await authedFetch(`/scrap/folders/${id}`, { method: "DELETE" });
+  } catch (err) {
+    setFolders(beforeFolders);
+    setScraps(beforeScraps);
+    throw err;
+  }
 }
 
 // ---- 스크랩 ----
-// 한 스킬은 폴더 하나에만 담긴다 — 다시 담으면 폴더를 옮기는 셈.
-export function addScrap(skillId: string, folderId: string) {
-  ensureLoaded();
+// 한 스킬은 폴더 하나에만 담긴다 — 다시 담으면 폴더를 옮기는 셈(백엔드도 동일 규칙).
+export async function addScrap(skillId: string, folderId: string): Promise<void> {
+  const before = scrapCache;
   const rest = scrapCache.filter((s) => s.skillId !== skillId);
-  commit(folderCache, [...rest, { skillId, folderId, addedAt: new Date().toISOString() }]);
+  setScraps([...rest, { skillId, folderId, addedAt: new Date().toISOString() }]);
+  try {
+    await authedFetch("/scrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skill_id: skillId, folder_id: folderId }),
+    });
+  } catch (err) {
+    setScraps(before);
+    throw err;
+  }
 }
 
-export function removeScrap(skillId: string) {
-  ensureLoaded();
-  commit(
-    folderCache,
-    scrapCache.filter((s) => s.skillId !== skillId)
-  );
+export async function removeScrap(skillId: string): Promise<void> {
+  const before = scrapCache;
+  setScraps(scrapCache.filter((s) => s.skillId !== skillId));
+  try {
+    await authedFetch(`/scrap/${skillId}`, { method: "DELETE" });
+  } catch (err) {
+    setScraps(before);
+    throw err;
+  }
 }

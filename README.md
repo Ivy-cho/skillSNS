@@ -233,47 +233,40 @@ POST   /skills/create/{draft_id}/confirm    # 확정 → 실제 스킬 등록
 
 ## 6. 프론트엔드 연동 테스트
 
-`frontend/`(Next.js)에서 skill-service의 스킬 만들기 파이프라인을 브라우저로 직접
-테스트하는 방법. Docker 없이 Python/Node.js를 PC에 바로 설치해서 진행한다. 배경 설명과
-문제 해결은 [`docs/frontend-integration.md`](docs/frontend-integration.md) 참고 — 여기는
-실행 명령만.
+`frontend/`(Next.js)에서 실제 소셜 로그인으로 로그인한 뒤 skill-service의 스킬 만들기
+파이프라인을 브라우저로 직접 테스트하는 방법. Docker 없이 Python/Node.js를 PC에 바로
+설치해서 진행한다. 배경 설명과 문제 해결은
+[`docs/frontend-integration.md`](docs/frontend-integration.md) 참고 — 여기는 실행 명령만.
 
 **사전 설치**
 - Python 3.11+ — Mac: `brew install python@3.11` / Windows: [python.org](https://www.python.org/downloads/windows/) (설치 시 "Add python.exe to PATH" 체크)
 - Node.js 20+ — Mac: `brew install node` / Windows: [nodejs.org](https://nodejs.org/) LTS
 
-**1) skill-service 실행** (`.env`는 2번 참고)
+**1) user-service, skill-service 실행** (`.env`는 2번 참고)
+```bash
+cd user-service
+pip install -r requirements.txt
+uvicorn main:app --port 8001 --reload
+```
 ```bash
 cd skill-service
 pip install -r requirements.txt
 python run.py        # Windows는 꼭 run.py로 실행
 ```
 
-**2) 임시 개발용 토큰 발급** (로그인 UI가 아직 없어서 로컬 테스트용으로 직접 서명)
-```bash
-cd skill-service
-python -c "
-from datetime import datetime, timedelta, timezone
-from jose import jwt
-from app.core.config import settings
-payload = {'sub': 'dev-frontend-tester', 'email': 'dev@example.com', 'type': 'access', 'exp': datetime.now(timezone.utc) + timedelta(days=7)}
-print(jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM))
-"
-```
-
-**3) `frontend/.env.local` 작성**
+**2) `frontend/.env.local` 작성**
 ```
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8002
-NEXT_PUBLIC_DEV_TOKEN=<2번에서 나온 토큰>
+NEXT_PUBLIC_USER_SERVICE_URL=http://localhost:8001
 ```
 
-**4) frontend 실행**
+**3) frontend 실행**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-`http://localhost:3000`에서 카테고리 선택 → 스킬 내용 채우기 → 이름 정하기 → 테스트(3분
-정도 소요) → 게시까지 눌러보면 된다. 자세한 체크리스트·트러블슈팅은
-[`docs/frontend-integration.md`](docs/frontend-integration.md).
+`http://localhost:3000`에서 카카오/구글로 로그인 → 카테고리 선택 → 스킬 내용 채우기 →
+이름 정하기 → 테스트(3분 정도 소요) → 게시까지 눌러보면 된다. 자세한
+체크리스트·트러블슈팅은 [`docs/frontend-integration.md`](docs/frontend-integration.md).

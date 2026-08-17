@@ -45,7 +45,7 @@ export function ScrapTab() {
   function handleCreate() {
     const name = newName.trim();
     if (!name) return;
-    createFolder(name);
+    createFolder(name).catch(() => {});
     setNewName("");
     setAdding(false);
   }
@@ -99,7 +99,7 @@ export function ScrapTab() {
               </Link>
               <button
                 type="button"
-                onClick={() => removeScrap(skill.id)}
+                onClick={() => removeScrap(skill.id).catch(() => {})}
                 aria-label="스크랩에서 빼기"
                 className="shrink-0 text-[0.72rem] text-muted underline underline-offset-2"
               >
@@ -137,7 +137,7 @@ export function ScrapTab() {
             <button
               type="button"
               onClick={() => {
-                if (renameValue.trim()) renameFolder(folder.id, renameValue);
+                if (renameValue.trim()) renameFolder(folder.id, renameValue).catch(() => {});
                 setRenamingId(null);
               }}
               className="shrink-0 rounded-lg bg-primary px-3 text-[0.78rem] font-semibold text-on-primary"
@@ -176,7 +176,7 @@ export function ScrapTab() {
             </button>
             <button
               type="button"
-              onClick={() => deleteFolder(folder.id)}
+              onClick={() => deleteFolder(folder.id).catch(() => {})}
               aria-label="폴더 삭제"
               className="shrink-0 text-[0.72rem] text-muted"
             >

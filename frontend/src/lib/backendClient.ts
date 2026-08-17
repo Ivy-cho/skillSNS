@@ -1,8 +1,16 @@
 // skill-service(/skills/create/*)와의 연동 지점. 화면 동작(UX)만 옛 목업과 같으면 되고,
 // URL/요청 모양은 skill-service의 draft_id 기반 계약을 그대로 따른다.
 
+import { getAccessToken } from "@/lib/authClient";
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
-const DEV_TOKEN = process.env.NEXT_PUBLIC_DEV_TOKEN ?? "";
+
+// 로그인 세션이 있을 때만 Authorization을 싣는다 — 없는 채로 보내면 skill-service가
+// 비로그인으로 처리한다(예: /chat은 "로그인이 필요합니다" 안내로 응답).
+function authHeaders(): Record<string, string> {
+  const token = getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export type CreationResponse = {
   draft_id: string;
@@ -34,7 +42,7 @@ class BackendError extends Error {}
 async function postForm(path: string, form?: FormData): Promise<CreationResponse> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${DEV_TOKEN}` },
+    headers: authHeaders(),
     body: form ?? new FormData(),
   });
   if (!res.ok) {
@@ -46,7 +54,7 @@ async function postForm(path: string, form?: FormData): Promise<CreationResponse
 
 async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
-    headers: { Authorization: `Bearer ${DEV_TOKEN}` },
+    headers: authHeaders(),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -58,7 +66,7 @@ async function getJSON<T>(path: string): Promise<T> {
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${DEV_TOKEN}`, "Content-Type": "application/json" },
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -103,7 +111,7 @@ export function retestDraft(draftId: string) {
 export async function confirmDraft(draftId: string): Promise<PublishedSkill> {
   const res = await fetch(`${BACKEND_URL}/skills/create/${draftId}/confirm`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${DEV_TOKEN}` },
+    headers: authHeaders(),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -128,7 +136,7 @@ export function listSkills(userId?: string) {
 export async function deleteSkill(skillId: string): Promise<void> {
   const res = await fetch(`${BACKEND_URL}/skills/${skillId}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${DEV_TOKEN}` },
+    headers: authHeaders(),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

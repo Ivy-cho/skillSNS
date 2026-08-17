@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { exchangeCodeForToken, saveSession, startDevSession } from "@/lib/authClient";
+import { exchangeCodeForToken, saveSession } from "@/lib/authClient";
 
 // 로그인 성공 후 들어갈 화면.
 const AFTER_LOGIN = "/home";
@@ -18,11 +18,7 @@ export function CallbackHandler() {
   // 제공자가 거부/취소하면 code 대신 error가 온다 — URL에서 바로 읽히는 값이라 렌더 중 파생.
   const denied = params.get("error_description") ?? params.get("error");
   const code = params.get("code");
-  // [임시] 개발용 대체 인증 화면에서 넘어온 경우 (실제 로그인이 열리면 제거).
-  const mock = params.get("mock") === "1";
-  const paramError =
-    denied ??
-    (code || mock ? null : "인증 코드가 없어요. 로그인을 다시 시도해 주세요.");
+  const paramError = denied ?? (code ? null : "인증 코드가 없어요. 로그인을 다시 시도해 주세요.");
   const error = paramError ?? exchangeError;
 
   useEffect(() => {
@@ -31,18 +27,14 @@ export function CallbackHandler() {
 
     (async () => {
       try {
-        if (mock) {
-          if (!startDevSession()) throw new Error("개발용 세션을 만들지 못했어요");
-        } else {
-          const token = await exchangeCodeForToken(code!);
-          saveSession(token);
-        }
+        const token = await exchangeCodeForToken(code!);
+        saveSession(token);
         router.replace(AFTER_LOGIN);
       } catch (e) {
         setExchangeError(e instanceof Error ? e.message : "로그인을 마치지 못했어요");
       }
     })();
-  }, [code, mock, paramError, router]);
+  }, [code, paramError, router]);
 
   if (error) {
     return (

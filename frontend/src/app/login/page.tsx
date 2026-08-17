@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuthed } from "@/components/auth/AuthGate";
-import { getSocialLoginUrl, isDevLoginAvailable, type Provider } from "@/lib/authClient";
+import { getSocialLoginUrl, type Provider } from "@/lib/authClient";
 
 // 소셜 로그인 버튼은 각 사 브랜드 가이드(배경/로고/문구)를 따른다 — 서비스 그린 액센트를
 // 입히지 않는다. 로고는 외부 애셋 없이 인라인 SVG로 근사한 것이라, 실제 배포 전에는
@@ -58,12 +58,6 @@ export default function LoginPage() {
       // 백엔드에 설정된 CALLBACK_URL(= 이 앱의 /auth/callback)로 code와 함께 돌아온다.
       window.location.href = await getSocialLoginUrl(provider);
     } catch (e) {
-      // [임시] 백엔드 CORS/설정 전이라 위 호출이 막히면, 흐름을 이어볼 수 있게 개발용 대체
-      // 화면으로 보낸다. 실제 로그인이 열리면 이 폴백을 지우고 에러만 보여주면 된다.
-      if (isDevLoginAvailable()) {
-        router.push(`/auth/mock/${provider}`);
-        return;
-      }
       setError(e instanceof Error ? e.message : "로그인을 시작하지 못했어요");
       setPending(null);
     }

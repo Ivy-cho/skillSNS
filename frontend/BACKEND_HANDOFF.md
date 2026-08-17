@@ -20,7 +20,8 @@
 | 스킬 삭제 | ✅ `DELETE /skills/{id}` — 내 스킬 목록에서 스와이프(터치)/호버(마우스) → 삭제. **추가 작업 없음** |
 | 소셜 로그인 | ✅ CORS/CALLBACK_URL 배선 완료(아래 1번). naver 제거, google/kakao만 지원 |
 | 프로필 편집 | ✅ `PATCH /auth/me`, `POST /auth/me/avatar` 구현 완료(아래 3번). `PROFILE_SAVE_ENABLED=true`로 전환함 |
-| 인증 | ⚠️ `NEXT_PUBLIC_DEV_TOKEN`(로컬 서명 토큰)으로 우회 중 — user-service 토큰을 skill-service가 그대로 검증 가능한지는 아직 미확인(1번 "같이 확인해 주세요" 참고) |
+| 스킬 스크랩 + 폴더 | ✅ `GET/POST/PATCH/DELETE /scrap`, `/scrap/folders` 구현 완료(아래 4번). `scrapStore.ts`가 localStorage 대신 API 호출 |
+| 인증 | ✅ 실 로그인 세션의 access token을 그대로 사용. `NEXT_PUBLIC_DEV_TOKEN` 우회 코드는 제거됨 |
 
 ---
 
@@ -55,14 +56,17 @@ No 'Access-Control-Allow-Origin' header is present
 - **Supabase 대시보드의 Redirect URL 허용 목록에도 같은 주소 추가** 필요
 
 ### 붙이는 법
-프론트는 별도 작업 없이 바로 동작합니다. 이후 임시 코드 정리만 하면 됩니다
-(`/auth/mock/[provider]` 라우트와 `isDevLoginAvailable` 폴백 — 전부 `[임시]` 주석 표시).
+프론트는 별도 작업 없이 바로 동작합니다. `NEXT_PUBLIC_DEV_TOKEN` 우회 코드
+(`isDevLoginAvailable`/`startDevSession`, `/auth/mock/[provider]` 라우트)는 실 로그인이
+확인돼 전부 제거했습니다. `backendClient.ts`/`scrapStore.ts`도 더는 고정된 개발용 토큰이
+아니라 실제 로그인 세션의 access token을 `Authorization` 헤더에 싣습니다(세션이 없으면
+헤더 자체를 생략 — skill-service의 `/chat`처럼 비로그인을 허용하는 라우트는 그대로 동작).
 
 ### 같이 확인해 주세요
 - 프론트는 access/refresh 토큰을 `localStorage`에 저장합니다(키 `skillsns.*`). XSS 노출
   위험이 있어 실서비스 전 **httpOnly 쿠키** 방식으로 옮길지 함께 정해야 합니다.
-- 로그인이 붙으면 `NEXT_PUBLIC_DEV_TOKEN` 우회를 제거할 예정입니다. **user-service가 발급한
-  토큰을 skill-service가 그대로 검증할 수 있나요?** (JWT_SECRET_KEY/알고리즘 공유 여부)
+- user-service가 발급한 토큰을 skill-service가 그대로 검증합니다(JWT_SECRET_KEY 공유 확인
+  완료).
 - 프론트 로그인 버튼은 카카오·구글 2종만 노출합니다(백엔드도 이제 이 2종만 지원, naver 제거됨).
 - 소셜 버튼 로고는 인라인 SVG 근사본이라, 배포 전 카카오/구글 **공식 애셋**으로 교체 필요.
 
@@ -138,17 +142,18 @@ Content-Type: multipart/form-data
 
 ---
 
-## 🟡 4. 스킬 스크랩 + 폴더
+## ✅ 4. 스킬 스크랩 + 폴더 (완료, 2026-08-17)
 
-**프론트 상태**: 기능이 **전부 동작합니다** — 다만 저장이 브라우저(localStorage)라
-기기·계정 간 공유가 안 됩니다.
+**프론트 상태**: 기능이 **전부 동작합니다.** `src/lib/scrapStore.ts`가 이제 skill-service의
+`/scrap`, `/scrap/folders`를 직접 호출합니다(기기·계정 간 공유됨). 네트워크 왕복을 기다리지
+않도록 로컬 캐시를 먼저 낙관적으로 갱신하고, 실패하면 되돌립니다.
 - 홈 "스크랩" 탭: 폴더 목록(담긴 개수), 폴더 만들기 / 이름 바꾸기 / 삭제, 폴더 안 스킬 목록
 - 스킬 대화 화면(`/skill/[id]`) 우측 상단 🔖 → 폴더 선택 시트(새 폴더 만들어 담기 포함)
 
-**붙이는 법**: `src/lib/scrapStore.ts` **한 파일의 구현만** fetch 호출로 바꾸면 됩니다.
-화면 코드는 이 파일의 함수만 쓰고 있어서 손댈 필요가 없습니다.
-
-### 필요한 API (프론트 함수와 1:1)
+**해결**: skill-service에 `ScrapFolder`/`Scrap` 테이블과 아래 라우트 구현
+(`app/api/routes/scrap.py`). `Scrap`은 `(user_id, skill_id)` 유니크 제약으로 **한 스킬은
+폴더 하나에만** 담기게 강제하고(다시 담으면 폴더 이동), 폴더 삭제는 FK `ondelete="CASCADE"`로
+안의 스크랩까지 함께 지웁니다. 폴더 이름은 1~30자, 중복 허용.
 
 ```
 GET    /scrap/folders                 → [{ id, name, created_at, skill_count }]
@@ -160,13 +165,8 @@ GET    /scrap                         [?folder_id=]       → [{ skill_id, folde
 POST   /scrap                         { skill_id, folder_id }  → 담기(이미 있으면 폴더 이동)
 DELETE /scrap/{skill_id}                                  → 빼기
 ```
-전부 `Authorization: Bearer <access_token>` 기준의 **사용자별** 데이터입니다.
-
-### 정해야 할 것
-- 지금 프론트는 **한 스킬은 폴더 하나에만** 담기게 했습니다(다시 담으면 폴더 이동).
-  여러 폴더에 중복 허용할지 정해주세요 — 허용하면 `DELETE /scrap/{skill_id}`에
-  `folder_id`가 필요합니다.
-- 폴더 이름 중복·길이 제한 정책.
+전부 `Authorization: Bearer <access_token>` 기준의 **사용자별** 데이터입니다(실 로그인
+세션의 access token 사용).
 
 ---
 

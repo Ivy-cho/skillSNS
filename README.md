@@ -1,15 +1,80 @@
 # skillSNS
 
-Agent 오케스트레이션을 활용한 Skill SNS MSA 서비스.
-사용자가 자신의 스킬을 공유하고 AI 에이전트와 대화하며 연결되는 소셜 네트워크 플랫폼.
+> 🚧 **개발 진행중** — 핵심 기능(로그인, 스킬 생성 파이프라인, 대화, 피드, 스크랩, 채팅
+> 목록)은 실 DB와 붙어 동작하지만, 아직 프로덕션 배포 전 마무리 단계다. 진행 상황은
+> [`frontend/BACKEND_HANDOFF.md`](frontend/BACKEND_HANDOFF.md)에 실시간으로 정리하고 있다.
 
-## 서비스 구성
+**개인이 가진 기술(노하우)을 나누고, 다른 사람의 기술을 이용할 수 있는 서비스**를
+기획하고 MSA 구조로 직접 구현했다. 사용자는 자신의 전문성을 AI 챗봇 형태의 "스킬"로
+만들어 공유하고, 다른 사람이 만든 스킬과 대화하며 그 기술을 실제로 이용할 수 있다.
+
+## 프로젝트 개요
+
+| 항목 | 내용 |
+|---|---|
+| 프로젝트명 | skillSNS |
+| 상태 | 🚧 개발 진행중 (핵심 기능 구현 완료, 프로덕션 배포 마무리 전) |
+| 목적 | Agent/Prompt 오케스트레이션을 활용한 Skill SNS 서비스 (포트폴리오용 토이 프로젝트) |
+| 아키텍처 | MSA — 독립 배포되는 백엔드 3개(user/skill/feed-service) + Next.js 프론트엔드 1개 |
+| 리포지토리 | [Ivy-cho/skillSNS](https://github.com/Ivy-cho/skillSNS) |
+| 브랜치 전략 | `backend`(백엔드 작업, Render 배포 트리거) / `frontend`(프론트 작업) / `develop`(통합) / `main`(프론트 배포 트리거, Vercel) |
+| 배포 | 백엔드 3개 — Render 무료 플랜 / 프론트엔드 — Vercel |
+
+기술 선택 배경(왜 FastAPI인지, 왜 Supabase·Render인지 등)은
+[`docs/tech-decisions.md`](docs/tech-decisions.md)에 별도로 정리돼 있다.
+
+## 무엇을 만들었나
+
+"면접 코치", "이직 자소서 첨삭러"처럼 스스로 잘 아는 분야를 AI 챗봇으로 빚어 남에게
+내어주고, 반대로 남이 빚어낸 챗봇을 가져다 쓰는 순환이 서비스의 핵심이다.
+
+### 주요 기능
+
+- **AI와 함께 스킬 만들기** — 주제 정하기 → 내용 정하기 → 이름 정하기 → 테스트 →
+  개선 → 게시, 5단계 대화형 파이프라인. 사용자가 만든 스킬을 실제로 가동해 스스로
+  질문·답변 테스트를 돌리고 객관적 기준으로 채점한 뒤, 부족하면 사용자 모르게
+  재작성까지 시도한다(`skill-service/app/agent/creator/`, LangGraph).
+- **스킬과 대화하기** — 게시된 스킬의 시스템 프롬프트로 실제 LLM과 대화. 대화 세션은
+  LangGraph의 Postgres 체크포인터에 저장되어 이어서 대화할 수 있다.
+- **피드** — 전체 공개 스킬을 최신순으로 보여주고, 제목·소개·작성자·카테고리로
+  검색. 상단 "요즘 뜨는 스킬"은 조회수 기준(동률이면 이름순) 트렌딩.
+- **스크랩 + 폴더** — 마음에 드는 스킬을 폴더별로 정리해서 담아둔다.
+- **채팅 목록** — 내가 대화해본 스킬들을 최근 대화순으로 모아본다.
+- **소셜 로그인 + 프로필** — 카카오/구글 로그인, 닉네임·소개글·프로필 사진 편집.
+
+### 아키텍처
+
+MSA로 나뉜 4개 서비스가 프론트엔드 하나를 함께 지원하고, 백엔드 3개는 같은 Supabase
+Postgres 인스턴스를 공유한다(서비스별 스키마 소유권은 지키되, 물리 DB는 하나).
+
+```
+Next.js(frontend)
+   ├─ user-service   ── 소셜 로그인, JWT 발급, 프로필
+   ├─ skill-service  ── 스킬 CRUD, AI 대화, 스킬 생성 파이프라인, 스크랩
+   └─ feed-service   ── skills/users/scraps를 읽기 전용 조인, 피드 제공
+                (셋 다 Supabase Postgres 하나를 공유)
+```
 
 | 서비스 | 포트 | 역할 |
 |---|---|---|
-| user-service | 8001 | 소셜 로그인 / JWT 인증 |
-| skill-service | 8002 | 스킬 관리 / AI 에이전트 대화 |
+| user-service | 8001 | 소셜 로그인 / JWT 인증 / 프로필 |
+| skill-service | 8002 | 스킬 CRUD / AI 에이전트 대화 / 스킬 생성 파이프라인 / 스크랩 |
 | feed-service | 8003 | 피드 조회 (skills/users/scraps를 읽기 전용으로 조회) |
+
+### 기술 스택
+
+| 영역 | 기술 |
+|---|---|
+| 백엔드 | Python 3.11, FastAPI, SQLAlchemy(async) + asyncpg |
+| AI 에이전트 | LangGraph, langchain-anthropic (Claude) |
+| DB | Supabase (PostgreSQL) |
+| 인증 | Supabase Auth(OAuth) + 자체 JWT(HS256) |
+| 프론트엔드 | Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS 4 |
+| 인프라 | Docker Compose(로컬), Render(백엔드 3개, 무료 플랜), Vercel(프론트엔드) |
+| CI/CD | GitHub Actions — lint 통과 시 Render Deploy Hook 호출 |
+
+자세한 기술 선택 배경은 [`docs/tech-decisions.md`](docs/tech-decisions.md), 스킬 생성
+파이프라인 상세 스펙은 [`docs/specs/skill-service.md`](docs/specs/skill-service.md) 참고.
 
 ---
 

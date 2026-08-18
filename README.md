@@ -1,14 +1,80 @@
 # skillSNS
 
-Agent 오케스트레이션을 활용한 Skill SNS MSA 서비스.
-사용자가 자신의 스킬을 공유하고 AI 에이전트와 대화하며 연결되는 소셜 네트워크 플랫폼.
+> 🚧 **개발 진행중** — 핵심 기능(로그인, 스킬 생성 파이프라인, 대화, 피드, 스크랩, 채팅
+> 목록)은 실 DB와 붙어 동작하지만, 아직 프로덕션 배포 전 마무리 단계다. 진행 상황은
+> [`frontend/BACKEND_HANDOFF.md`](frontend/BACKEND_HANDOFF.md)에 실시간으로 정리하고 있다.
 
-## 서비스 구성
+**개인이 가진 기술(노하우)을 나누고, 다른 사람의 기술을 이용할 수 있는 서비스**를
+기획하고 MSA 구조로 직접 구현했다. 사용자는 자신의 전문성을 AI 챗봇 형태의 "스킬"로
+만들어 공유하고, 다른 사람이 만든 스킬과 대화하며 그 기술을 실제로 이용할 수 있다.
+
+## 프로젝트 개요
+
+| 항목 | 내용 |
+|---|---|
+| 프로젝트명 | skillSNS |
+| 상태 | 🚧 개발 진행중 (핵심 기능 구현 완료, 프로덕션 배포 마무리 전) |
+| 목적 | Agent/Prompt 오케스트레이션을 활용한 Skill SNS 서비스 (포트폴리오용 토이 프로젝트) |
+| 아키텍처 | MSA — 독립 배포되는 백엔드 3개(user/skill/feed-service) + Next.js 프론트엔드 1개 |
+| 리포지토리 | [Ivy-cho/skillSNS](https://github.com/Ivy-cho/skillSNS) |
+| 브랜치 전략 | `backend`(백엔드 작업, Render 배포 트리거) / `frontend`(프론트 작업) / `develop`(통합) / `main`(프론트 배포 트리거, Vercel) |
+| 배포 | 백엔드 3개 — Render 무료 플랜 / 프론트엔드 — Vercel |
+
+기술 선택 배경(왜 FastAPI인지, 왜 Supabase·Render인지 등)은
+[`docs/tech-decisions.md`](docs/tech-decisions.md)에 별도로 정리돼 있다.
+
+## 무엇을 만들었나
+
+"면접 코치", "이직 자소서 첨삭러"처럼 스스로 잘 아는 분야를 AI 챗봇으로 빚어 남에게
+내어주고, 반대로 남이 빚어낸 챗봇을 가져다 쓰는 순환이 서비스의 핵심이다.
+
+### 주요 기능
+
+- **AI와 함께 스킬 만들기** — 주제 정하기 → 내용 정하기 → 이름 정하기 → 테스트 →
+  개선 → 게시, 5단계 대화형 파이프라인. 사용자가 만든 스킬을 실제로 가동해 스스로
+  질문·답변 테스트를 돌리고 객관적 기준으로 채점한 뒤, 부족하면 사용자 모르게
+  재작성까지 시도한다(`skill-service/app/agent/creator/`, LangGraph).
+- **스킬과 대화하기** — 게시된 스킬의 시스템 프롬프트로 실제 LLM과 대화. 대화 세션은
+  LangGraph의 Postgres 체크포인터에 저장되어 이어서 대화할 수 있다.
+- **피드** — 전체 공개 스킬을 최신순으로 보여주고, 제목·소개·작성자·카테고리로
+  검색. 상단 "요즘 뜨는 스킬"은 조회수 기준(동률이면 이름순) 트렌딩.
+- **스크랩 + 폴더** — 마음에 드는 스킬을 폴더별로 정리해서 담아둔다.
+- **채팅 목록** — 내가 대화해본 스킬들을 최근 대화순으로 모아본다.
+- **소셜 로그인 + 프로필** — 카카오/구글 로그인, 닉네임·소개글·프로필 사진 편집.
+
+### 아키텍처
+
+MSA로 나뉜 4개 서비스가 프론트엔드 하나를 함께 지원하고, 백엔드 3개는 같은 Supabase
+Postgres 인스턴스를 공유한다(서비스별 스키마 소유권은 지키되, 물리 DB는 하나).
+
+```
+Next.js(frontend)
+   ├─ user-service   ── 소셜 로그인, JWT 발급, 프로필
+   ├─ skill-service  ── 스킬 CRUD, AI 대화, 스킬 생성 파이프라인, 스크랩
+   └─ feed-service   ── skills/users/scraps를 읽기 전용 조인, 피드 제공
+                (셋 다 Supabase Postgres 하나를 공유)
+```
 
 | 서비스 | 포트 | 역할 |
 |---|---|---|
-| user-service | 8001 | 소셜 로그인 / JWT 인증 |
-| skill-service | 8002 | 스킬 관리 / AI 에이전트 대화 |
+| user-service | 8001 | 소셜 로그인 / JWT 인증 / 프로필 |
+| skill-service | 8002 | 스킬 CRUD / AI 에이전트 대화 / 스킬 생성 파이프라인 / 스크랩 |
+| feed-service | 8003 | 피드 조회 (skills/users/scraps를 읽기 전용으로 조회) |
+
+### 기술 스택
+
+| 영역 | 기술 |
+|---|---|
+| 백엔드 | Python 3.11, FastAPI, SQLAlchemy(async) + asyncpg |
+| AI 에이전트 | LangGraph, langchain-anthropic (Claude) |
+| DB | Supabase (PostgreSQL) |
+| 인증 | Supabase Auth(OAuth) + 자체 JWT(HS256) |
+| 프론트엔드 | Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS 4 |
+| 인프라 | Docker Compose(로컬), Render(백엔드 3개, 무료 플랜), Vercel(프론트엔드) |
+| CI/CD | GitHub Actions — lint 통과 시 Render Deploy Hook 호출 |
+
+자세한 기술 선택 배경은 [`docs/tech-decisions.md`](docs/tech-decisions.md), 스킬 생성
+파이프라인 상세 스펙은 [`docs/specs/skill-service.md`](docs/specs/skill-service.md) 참고.
 
 ---
 
@@ -74,6 +140,13 @@ JWT_SECRET_KEY=...        # user-service와 반드시 동일한 값
 ANTHROPIC_API_KEY=...
 ```
 
+**feed-service/.env**
+```
+DATABASE_URL=postgresql+asyncpg://postgres:password@db.your-project.supabase.co:5432/postgres
+```
+user-service/skill-service와 같은 DB를 가리켜야 합니다 — feed-service는 자체 테이블 없이
+`users`/`skills`/`scraps`를 읽기 전용으로 조회만 합니다.
+
 ---
 
 ## 3. 실행
@@ -101,9 +174,10 @@ Python 3.11 이상 필요.
 ```bash
 cd user-service && pip install -r requirements.txt
 cd ../skill-service && pip install -r requirements.txt
+cd ../feed-service && pip install -r requirements.txt
 ```
 
-서버 실행 (터미널 2개):
+서버 실행 (터미널 3개):
 ```bash
 # 터미널 1
 cd user-service
@@ -112,6 +186,10 @@ python -m uvicorn main:app --port 8001
 # 터미널 2
 cd skill-service
 python run.py        # Windows는 반드시 run.py로 실행 (uvicorn 직접 실행 시 오류 발생)
+
+# 터미널 3
+cd feed-service
+python -m uvicorn main:app --port 8003
 ```
 
 ---
@@ -183,6 +261,7 @@ git push (backend 브랜치)
 |---|---|
 | http://localhost:8001 | 소셜 로그인 테스트 |
 | http://localhost:8002 | 스킬 관리 + AI 에이전트 대화 테스트 |
+| http://localhost:8003/feed | 피드 목록 (JSON, 별도 테스트 UI 없음) |
 
 **순서:**
 1. `http://localhost:8001` 접속 → Google 로그인
@@ -195,12 +274,13 @@ git push (backend 브랜치)
 |---|---|
 | http://localhost:8001/docs | user-service |
 | http://localhost:8002/docs | skill-service |
+| http://localhost:8003/docs | feed-service |
 
 ### 주요 API
 
 **user-service**
 ```
-GET  /auth/login/{provider}    # provider: google / kakao / naver
+GET  /auth/login/{provider}    # provider: google / kakao
 GET  /auth/callback            # OAuth 콜백 (자동 처리됨)
 GET  /auth/me                  # 현재 로그인 사용자 정보
 POST /auth/refresh             # Access Token 갱신
@@ -218,6 +298,7 @@ GET    /skills/{id}/download          # MD 파일 다운로드
 POST   /chat/{skill_id}               # 새 대화 시작
 POST   /chat/{skill_id}/{session_id}  # 대화 이어가기
 GET    /chat/{skill_id}/{session_id}  # 대화 기록 조회
+GET    /chat/sessions                 # 내 대화 목록 (채팅 목록 화면)
 
 POST   /skills/create                       # 스킬 만들기 시작 (카테고리 선택)
 POST   /skills/create/{draft_id}            # 대화 이어가기 (메시지/링크/파일)
@@ -227,53 +308,62 @@ GET    /skills/create/{draft_id}            # 진행 상황 조회
 POST   /skills/create/{draft_id}/confirm    # 확정 → 실제 스킬 등록
 ```
 
+**scrap** (skill-service, prefix `/scrap`)
+```
+GET    /scrap/folders             # 내 스크랩 폴더 목록
+POST   /scrap/folders             # 폴더 생성
+PATCH  /scrap/folders/{id}        # 폴더 이름 변경
+DELETE /scrap/folders/{id}        # 폴더 삭제 (안의 스크랩도 함께)
+GET    /scrap                     # 내 스크랩 목록 (?folder_id= 필터)
+POST   /scrap                     # 담기 (이미 있으면 폴더 이동)
+DELETE /scrap/{skill_id}          # 빼기
+```
+
+**feed-service**
+```
+GET /feed    # 스킬 피드 (작성자 닉네임·스크랩 수 포함, 최신순)
+```
+
 자세한 요청/응답 형식은 `docs/specs/skill-service.md` 참고.
 
 ---
 
 ## 6. 프론트엔드 연동 테스트
 
-`frontend/`(Next.js)에서 skill-service의 스킬 만들기 파이프라인을 브라우저로 직접
-테스트하는 방법. Docker 없이 Python/Node.js를 PC에 바로 설치해서 진행한다. 배경 설명과
-문제 해결은 [`docs/frontend-integration.md`](docs/frontend-integration.md) 참고 — 여기는
-실행 명령만.
+`frontend/`(Next.js)에서 실제 소셜 로그인으로 로그인한 뒤 skill-service의 스킬 만들기
+파이프라인을 브라우저로 직접 테스트하는 방법. Docker 없이 Python/Node.js를 PC에 바로
+설치해서 진행한다. 배경 설명과 문제 해결은
+[`docs/frontend-integration.md`](docs/frontend-integration.md) 참고 — 여기는 실행 명령만.
 
 **사전 설치**
 - Python 3.11+ — Mac: `brew install python@3.11` / Windows: [python.org](https://www.python.org/downloads/windows/) (설치 시 "Add python.exe to PATH" 체크)
 - Node.js 20+ — Mac: `brew install node` / Windows: [nodejs.org](https://nodejs.org/) LTS
 
-**1) skill-service 실행** (`.env`는 2번 참고)
+**1) user-service, skill-service 실행** (`.env`는 2번 참고)
+```bash
+cd user-service
+pip install -r requirements.txt
+uvicorn main:app --port 8001 --reload
+```
 ```bash
 cd skill-service
 pip install -r requirements.txt
 python run.py        # Windows는 꼭 run.py로 실행
 ```
 
-**2) 임시 개발용 토큰 발급** (로그인 UI가 아직 없어서 로컬 테스트용으로 직접 서명)
-```bash
-cd skill-service
-python -c "
-from datetime import datetime, timedelta, timezone
-from jose import jwt
-from app.core.config import settings
-payload = {'sub': 'dev-frontend-tester', 'email': 'dev@example.com', 'type': 'access', 'exp': datetime.now(timezone.utc) + timedelta(days=7)}
-print(jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM))
-"
-```
-
-**3) `frontend/.env.local` 작성**
+**2) `frontend/.env.local` 작성**
 ```
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8002
-NEXT_PUBLIC_DEV_TOKEN=<2번에서 나온 토큰>
+NEXT_PUBLIC_USER_SERVICE_URL=http://localhost:8001
 ```
 
-**4) frontend 실행**
+**3) frontend 실행**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-`http://localhost:3000`에서 카테고리 선택 → 스킬 내용 채우기 → 이름 정하기 → 테스트(3분
-정도 소요) → 게시까지 눌러보면 된다. 자세한 체크리스트·트러블슈팅은
-[`docs/frontend-integration.md`](docs/frontend-integration.md).
+`http://localhost:3000`에서 카카오/구글로 로그인 → 카테고리 선택 → 스킬 내용 채우기 →
+이름 정하기 → 테스트(3분 정도 소요) → 게시까지 눌러보면 된다. 자세한
+체크리스트·트러블슈팅은 [`docs/frontend-integration.md`](docs/frontend-integration.md).

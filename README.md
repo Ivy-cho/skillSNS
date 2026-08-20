@@ -196,16 +196,26 @@ python -m uvicorn main:app --port 8003
 
 ## 4. 배포 (Render + GitHub Actions)
 
-`backend` 브랜치에 push하면 GitHub Actions가 lint를 실행하고, 통과 시 Render에 자동 배포됩니다.
+**전부 무료 플랜으로 배포되고, 4개 서비스 모두 각자의 `Dockerfile`로 실제 Docker
+이미지를 빌드해서 그 컨테이너를 그대로 실행합니다** (Render의 `env: docker`). 프론트도
+Vercel의 자체 Next.js 빌드가 아니라 `frontend/Dockerfile`로 빌드된 컨테이너가 뜹니다.
+
+`backend` 브랜치에 push하면 GitHub Actions(`deploy.yml`)가 백엔드 lint(ruff) +
+프론트 타입체크·lint(tsc/eslint)를 돌리고, 전부 통과해야 Render Deploy Hook 4개를
+차례로 호출해 자동 배포합니다. `develop`/`frontend`/`main` 브랜치는 별도
+워크플로(`ci.yml`)가 배포 없이 같은 검사만 돌려서, 머지 전에 문제를 미리 잡습니다.
 
 ### 4-1. Render 초기 설정
 
 1. [Render](https://render.com) 회원가입 → GitHub 계정 연동
 
 2. 대시보드에서 **New → Blueprint** 선택 → 이 저장소 연결
-   - `render.yaml`을 자동으로 인식해 두 서비스를 생성함
+   - `render.yaml`을 자동으로 인식해 4개 서비스(user/skill/feed-service + frontend)를
+     생성함 — 전부 `env: docker`라 각자 디렉토리의 `Dockerfile`로 빌드됨
 
-3. 각 서비스에서 환경변수 설정 (Dashboard → 서비스 → Environment)
+3. 각 서비스에서 `sync: false`로 표시된 환경변수를 채워넣습니다 (Dashboard → 서비스 →
+   Environment). `value:`가 이미 있는 값(예: `CORS_ORIGINS`, `NEXT_PUBLIC_*`)은
+   서비스 이름이 `render.yaml` 그대로라면 손댈 필요 없습니다.
 
    **skillsns-user-service**
    ```
@@ -214,7 +224,7 @@ python -m uvicorn main:app --port 8003
    SUPABASE_SERVICE_KEY=...
    DATABASE_URL=postgresql+asyncpg://...
    JWT_SECRET_KEY=...
-   CALLBACK_URL=https://skillsns-user-service.onrender.com/auth/callback
+   CALLBACK_URL=https://skillsns-frontend.onrender.com/auth/callback
    ```
 
    **skillsns-skill-service**
@@ -224,11 +234,21 @@ python -m uvicorn main:app --port 8003
    ANTHROPIC_API_KEY=...
    ```
 
-   > `CALLBACK_URL`은 Render가 서비스를 생성한 뒤 확인할 수 있는 실제 URL로 입력합니다.
-   > Supabase 대시보드 → Authentication → URL Configuration에도 동일하게 등록해야 합니다.
+   **skillsns-feed-service**
+   ```
+   DATABASE_URL=postgresql+asyncpg://...
+   ```
 
-4. 각 서비스의 **Deploy Hook URL** 복사
-   - Dashboard → 서비스 → Settings → Deploy Hook
+   > `CALLBACK_URL`은 **프론트엔드의 콜백 페이지**(`skillsns-frontend` 서비스의
+   > `/auth/callback`)를 가리켜야 합니다 — user-service 자신의 URL이 아닙니다.
+   > Supabase 대시보드 → Authentication → URL Configuration에도 동일한 주소를
+   > Redirect URL로 등록해야 합니다.
+   >
+   > 서비스 이름을 `render.yaml`과 다르게 바꿨다면, `render.yaml`의
+   > `CORS_ORIGINS`/`NEXT_PUBLIC_*` 값도 실제 `.onrender.com` 도메인에 맞게 고쳐야
+   > 합니다(Render 서비스 URL은 `https://<서비스명>.onrender.com` 규칙).
+
+4. 각 서비스의 **Deploy Hook URL** 복사 — Dashboard → 서비스 → Settings → Deploy Hook
 
 ### 4-2. GitHub Secrets 등록
 
@@ -238,18 +258,32 @@ GitHub 저장소 → Settings → Secrets and variables → Actions → **New re
 |---|---|
 | `RENDER_DEPLOY_HOOK_USER_SERVICE` | Render user-service Deploy Hook URL |
 | `RENDER_DEPLOY_HOOK_SKILL_SERVICE` | Render skill-service Deploy Hook URL |
+| `RENDER_DEPLOY_HOOK_FEED_SERVICE` | Render feed-service Deploy Hook URL |
+| `RENDER_DEPLOY_HOOK_FRONTEND` | Render frontend Deploy Hook URL |
 
 ### 4-3. 동작 방식
 
 ```
 git push (backend 브랜치)
-  └─ GitHub Actions
-       ├─ lint (ruff) → 실패 시 배포 중단
-       └─ 통과 시 Render Deploy Hook 호출 → 자동 배포
+  └─ GitHub Actions (deploy.yml)
+       ├─ lint-backend (ruff: user/skill/feed-service)  ┐
+       ├─ lint-frontend (tsc + eslint)                  ┴─ 실패 시 배포 중단
+       └─ 전부 통과 시 Render Deploy Hook 4개 순차 호출 → 각자 Dockerfile로 빌드·배포
+
+git push (develop / frontend / main 브랜치), 또는 위 4개 브랜치로의 PR
+  └─ GitHub Actions (ci.yml) — 위와 같은 lint만 돌리고 배포는 하지 않음
 ```
 
 > **Render 무료 플랜 주의사항**: 15분 이상 요청이 없으면 서비스가 슬립 상태로 전환됩니다.
-> 첫 요청 시 30-50초 콜드 스타트가 발생합니다. 포트폴리오 용도면 충분합니다.
+> 첫 요청 시 30-50초 콜드 스타트가 발생합니다(4개 서비스 다 해당). 포트폴리오
+> 용도면 충분합니다.
+
+> **프론트를 Vercel로 대신 배포하고 싶다면**: `render.yaml`에서 `skillsns-frontend`
+> 서비스만 빼고 나머지 3개(백엔드)는 그대로 두면 됩니다. Vercel은 Dockerfile을 쓰지
+> 않고 Next.js를 직접 빌드하며, GitHub 연동만 해두면 `main` push 시 자동 배포됩니다
+> (별도 GitHub Actions 설정 불필요). 이 경우 각 백엔드 서비스의 `CORS_ORIGINS`에
+> Vercel 배포 도메인(`https://<프로젝트명>.vercel.app`)이 포함돼 있는지만 확인하면
+> 됩니다 — `render.yaml`엔 이미 두 도메인이 모두 들어있습니다.
 
 ---
 

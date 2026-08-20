@@ -1,13 +1,21 @@
-name: CI/CD
+name: CI Checks
 
+# backend 브랜치로의 직접 push는 deploy.yml이 같은 검사를 이미 포함해서 돌리므로
+# 여기선 제외한다(중복 실행 방지). 다만 backend로 들어오는 PR은 머지 전에 걸러야
+# 하니 pull_request 쪽엔 남겨둔다.
 on:
   push:
-    branches: [backend]
+    branches: [develop, frontend, main]
+  pull_request:
+    branches: [backend, develop, frontend, main]
 
 jobs:
   lint-backend:
-    name: Lint (backend)
+    name: Lint (${{ matrix.service }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [user-service, skill-service, feed-service]
     steps:
       - uses: actions/checkout@v4
 
@@ -19,9 +27,9 @@ jobs:
         run: pip install ruff
 
       - name: Run ruff
-        run: ruff check user-service/ skill-service/ feed-service/
+        run: ruff check ${{ matrix.service }}/
 
-  lint-frontend:
+  check-frontend:
     name: Typecheck + Lint (frontend)
     runs-on: ubuntu-latest
     defaults:
@@ -44,20 +52,3 @@ jobs:
 
       - name: Lint
         run: npx eslint src
-
-  deploy:
-    name: Deploy to Render
-    needs: [lint-backend, lint-frontend]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy user-service
-        run: curl -f "${{ secrets.RENDER_DEPLOY_HOOK_USER_SERVICE }}"
-
-      - name: Deploy skill-service
-        run: curl -f "${{ secrets.RENDER_DEPLOY_HOOK_SKILL_SERVICE }}"
-
-      - name: Deploy feed-service
-        run: curl -f "${{ secrets.RENDER_DEPLOY_HOOK_FEED_SERVICE }}"
-
-      - name: Deploy frontend
-        run: curl -f "${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}"

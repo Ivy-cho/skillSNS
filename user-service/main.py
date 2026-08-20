@@ -13,6 +13,7 @@ from storage3.utils import StorageException
 
 from app.api.routes.auth import AVATAR_BUCKET, MAX_AVATAR_SIZE, supabase_admin
 from app.api.routes.auth import router as auth_router
+from app.core.config import settings
 from app.db.database import Base, engine
 
 
@@ -38,11 +39,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="skillSNS - User Service", version="1.0.0", lifespan=lifespan)
 
-# 프론트(frontend/, Next.js dev server)가 브라우저에서 직접 이 서버를 호출한다.
-# 로컬 개발용 origin만 허용 — 배포 시엔 실제 프론트 도메인으로 좁혀야 한다.
+# 프론트(frontend/)가 브라우저에서 직접 이 서버를 호출한다. 허용 오리진은
+# CORS_ORIGINS 환경변수로 관리(기본값 로컬 전용) — 배포 도메인은 .env에서 추가한다.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

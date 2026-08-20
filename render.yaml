@@ -27,6 +27,8 @@ services:
         value: "7"
       - key: CALLBACK_URL
         sync: false
+      - key: CORS_ORIGINS
+        value: https://skillsns-frontend.onrender.com,https://skillsns.vercel.app
 
   - type: web
     name: skillsns-skill-service
@@ -48,6 +50,8 @@ services:
         sync: false
       - key: ANTHROPIC_MODEL
         value: claude-sonnet-4-6
+      - key: CORS_ORIGINS
+        value: https://skillsns-frontend.onrender.com,https://skillsns.vercel.app
 
   - type: web
     name: skillsns-feed-service
@@ -61,3 +65,22 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: CORS_ORIGINS
+        value: https://skillsns-frontend.onrender.com,https://skillsns.vercel.app
+
+  - type: web
+    name: skillsns-frontend
+    env: docker
+    plan: free
+    branch: backend
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    healthCheckPath: /
+    autoDeploy: false
+    envVars:
+      - key: NEXT_PUBLIC_BACKEND_URL
+        value: https://skillsns-skill-service.onrender.com
+      - key: NEXT_PUBLIC_USER_SERVICE_URL
+        value: https://skillsns-user-service.onrender.com
+      - key: NEXT_PUBLIC_FEED_SERVICE_URL
+        value: https://skillsns-feed-service.onrender.com

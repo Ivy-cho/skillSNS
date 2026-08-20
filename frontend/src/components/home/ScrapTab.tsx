@@ -40,7 +40,6 @@ export function ScrapTab() {
   }, []);
 
   const skillById = new Map(allSkills.map((s) => [s.id, s]));
-  const countFor = (folderId: string) => scraps.filter((s) => s.folderId === folderId).length;
 
   function handleCreate() {
     const name = newName.trim();
@@ -72,7 +71,7 @@ export function ScrapTab() {
           <span className="min-w-0 flex-1 truncate text-[0.9rem] font-bold text-ink">
             📁 {openFolder.name}
           </span>
-          <span className="font-mono text-[0.68rem] text-muted">{items.length}</span>
+          <span className="font-mono text-[0.68rem] text-muted">{openFolder.skillCount}</span>
         </div>
 
         {items.length === 0 ? (
@@ -160,7 +159,7 @@ export function ScrapTab() {
                 {folder.name}
               </span>
               <span className="shrink-0 font-mono text-[0.68rem] text-muted">
-                {countFor(folder.id)}
+                {folder.skillCount}
               </span>
             </button>
             <button

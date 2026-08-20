@@ -9,7 +9,7 @@ import { CATEGORIES } from "@/components/skill-creator/types";
 import { ScrapTab } from "@/components/home/ScrapTab";
 import { CreateSkillSheet } from "@/components/home/CreateSkillSheet";
 import { SwipeableSkillItem } from "@/components/home/SwipeableSkillItem";
-import { getEmptyScraps, getScrapsSnapshot, subscribeScraps } from "@/lib/scrapStore";
+import { getEmptyScraps, getScrapsSnapshot, notifySkillDeleted, subscribeScraps } from "@/lib/scrapStore";
 
 function emojiFor(category: string) {
   return CATEGORIES.find((c) => c.label === category)?.emoji ?? "🍅";
@@ -58,6 +58,8 @@ export default function HomePage() {
     try {
       await deleteSkill(skillId);
       setSkills((prev) => prev?.filter((s) => s.id !== skillId) ?? null);
+      // DB는 scraps.skill_id의 cascade로 이미 정리됐다 — 스크랩 탭 캐시(폴더 개수 포함)도 맞춰준다.
+      notifySkillDeleted(skillId);
     } catch (e) {
       setError(e instanceof Error ? e.message : "스킬을 삭제하지 못했어요");
     } finally {

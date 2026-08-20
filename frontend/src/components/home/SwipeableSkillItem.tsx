@@ -30,20 +30,26 @@ export function SwipeableSkillItem({
   const openRef = useRef(false);
   const dxRef = useRef(0);
   const moved = useRef(0);
+  const captured = useRef(false);
 
   function onPointerDown(e: React.PointerEvent) {
     draggingRef.current = true;
     setDragging(true);
     moved.current = 0;
     startX.current = e.clientX;
-    // 포인터를 이 요소에 붙잡아 둔다 — 카드 밖으로 끌어도 move/up을 계속 받는다.
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    captured.current = false;
   }
 
   function onPointerMove(e: React.PointerEvent) {
     if (!draggingRef.current) return;
     const delta = e.clientX - startX.current + (openRef.current ? -REVEAL : 0);
     moved.current = Math.max(moved.current, Math.abs(e.clientX - startX.current));
+    // 캡처는 "끌기가 시작된 뒤"에만 건다. 누르자마자 캡처하면 이어지는 click 이벤트가
+    // 안쪽 링크가 아니라 캡처한 이 div로 가버려서 카드를 눌러도 이동하지 않는다.
+    if (!captured.current && moved.current > DRAG_SLOP) {
+      captured.current = true;
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    }
     // 왼쪽으로만(음수), REVEAL까지만 민다.
     const next = Math.max(-REVEAL, Math.min(0, delta));
     dxRef.current = next;

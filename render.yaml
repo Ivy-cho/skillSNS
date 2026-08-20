@@ -3,7 +3,7 @@ services:
     name: skillsns-user-service
     env: docker
     plan: free
-    branch: backend
+    branch: develop
     dockerfilePath: ./user-service/Dockerfile
     dockerContext: ./user-service
     healthCheckPath: /health
@@ -34,7 +34,7 @@ services:
     name: skillsns-skill-service
     env: docker
     plan: free
-    branch: backend
+    branch: develop
     dockerfilePath: ./skill-service/Dockerfile
     dockerContext: ./skill-service
     healthCheckPath: /health
@@ -57,7 +57,7 @@ services:
     name: skillsns-feed-service
     env: docker
     plan: free
-    branch: backend
+    branch: develop
     dockerfilePath: ./feed-service/Dockerfile
     dockerContext: ./feed-service
     healthCheckPath: /health
@@ -72,7 +72,7 @@ services:
     name: skillsns-frontend
     env: docker
     plan: free
-    branch: backend
+    branch: develop
     dockerfilePath: ./frontend/Dockerfile
     dockerContext: ./frontend
     healthCheckPath: /

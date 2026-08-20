@@ -1,11 +1,11 @@
 name: CI Checks
 
-# backend 브랜치로의 직접 push는 deploy.yml이 같은 검사를 이미 포함해서 돌리므로
-# 여기선 제외한다(중복 실행 방지). 다만 backend로 들어오는 PR은 머지 전에 걸러야
+# develop 브랜치로의 직접 push는 deploy.yml이 같은 검사를 이미 포함해서 돌리므로
+# 여기선 제외한다(중복 실행 방지). 다만 develop로 들어오는 PR은 머지 전에 걸러야
 # 하니 pull_request 쪽엔 남겨둔다.
 on:
   push:
-    branches: [develop, frontend, main]
+    branches: [backend, frontend, main]
   pull_request:
     branches: [backend, develop, frontend, main]
 

@@ -17,7 +17,7 @@
 | 목적 | Agent/Prompt 오케스트레이션을 활용한 Skill SNS 서비스 (포트폴리오용 토이 프로젝트) |
 | 아키텍처 | MSA — 독립 배포되는 백엔드 3개(user/skill/feed-service) + Next.js 프론트엔드 1개 |
 | 리포지토리 | [Ivy-cho/skillSNS](https://github.com/Ivy-cho/skillSNS) |
-| 브랜치 전략 | `backend`(백엔드 작업, Render 배포 트리거) / `frontend`(프론트 작업) / `develop`(통합) / `main`(프론트 배포 트리거, Vercel) |
+| 브랜치 전략 | `backend`(백엔드 작업) / `frontend`(프론트 작업) / `develop`(통합, Render 배포 트리거) / `main`(프론트 배포 트리거, Vercel) |
 | 배포 | 백엔드 3개 — Render 무료 플랜 / 프론트엔드 — Vercel |
 
 기술 선택 배경(왜 FastAPI인지, 왜 Supabase·Render인지 등)은
@@ -200,9 +200,9 @@ python -m uvicorn main:app --port 8003
 이미지를 빌드해서 그 컨테이너를 그대로 실행합니다** (Render의 `env: docker`). 프론트도
 Vercel의 자체 Next.js 빌드가 아니라 `frontend/Dockerfile`로 빌드된 컨테이너가 뜹니다.
 
-`backend` 브랜치에 push하면 GitHub Actions(`deploy.yml`)가 백엔드 lint(ruff) +
+`develop` 브랜치에 push하면 GitHub Actions(`deploy.yml`)가 백엔드 lint(ruff) +
 프론트 타입체크·lint(tsc/eslint)를 돌리고, 전부 통과해야 Render Deploy Hook 4개를
-차례로 호출해 자동 배포합니다. `develop`/`frontend`/`main` 브랜치는 별도
+차례로 호출해 자동 배포합니다. `backend`/`frontend`/`main` 브랜치는 별도
 워크플로(`ci.yml`)가 배포 없이 같은 검사만 돌려서, 머지 전에 문제를 미리 잡습니다.
 
 ### 4-1. Render 초기 설정
@@ -264,13 +264,13 @@ GitHub 저장소 → Settings → Secrets and variables → Actions → **New re
 ### 4-3. 동작 방식
 
 ```
-git push (backend 브랜치)
+git push (develop 브랜치)
   └─ GitHub Actions (deploy.yml)
        ├─ lint-backend (ruff: user/skill/feed-service)  ┐
        ├─ lint-frontend (tsc + eslint)                  ┴─ 실패 시 배포 중단
        └─ 전부 통과 시 Render Deploy Hook 4개 순차 호출 → 각자 Dockerfile로 빌드·배포
 
-git push (develop / frontend / main 브랜치), 또는 위 4개 브랜치로의 PR
+git push (backend / frontend / main 브랜치), 또는 위 4개 브랜치로의 PR
   └─ GitHub Actions (ci.yml) — 위와 같은 lint만 돌리고 배포는 하지 않음
 ```
 

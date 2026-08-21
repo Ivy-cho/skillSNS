@@ -2,7 +2,7 @@
 
 `frontend/`(Next.js)가 user-service로 실제 소셜 로그인을 하고, skill-service의
 `/skills/create/*`를 직접 호출해서 스킬 만들기 파이프라인(카테고리 선택 → 확정)을
-브라우저로 테스트할 수 있다. README의 "6. 프론트엔드 연동 테스트"는 실행 명령어만 담고
+브라우저로 테스트할 수 있다. README의 "9. 프론트엔드 연동 테스트"는 실행 명령어만 담고
 있고, 이 문서엔 그 배경과 상세 절차, 문제 해결을 정리했다.
 
 ---
@@ -58,7 +58,7 @@ node --version
 
 ### 3. user-service, skill-service 실행
 
-`.env` 파일은 README 2번 "프로젝트 설정"과 동일하게 준비돼 있어야 한다(Supabase
+`.env` 파일은 README 5번 "프로젝트 설정"과 동일하게 준비돼 있어야 한다(Supabase
 `DATABASE_URL`, `JWT_SECRET_KEY`, `ANTHROPIC_API_KEY` 등). 로그인까지 테스트하려면
 user-service도 함께 띄워야 한다.
 

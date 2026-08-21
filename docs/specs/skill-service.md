@@ -461,7 +461,7 @@ Authorization: Bearer {access_token}
 ### 6-9-2. 스크랩 / BYOK(사용자 Anthropic 키)
 
 스크랩(`/scrap/*`)과 BYOK(`/me/anthropic-key`) 엔드포인트 전체 목록·요청/응답 형식은
-`README.md` 5절 "주요 API"에 정리돼 있다 — 둘 다 CRUD가 단순해 여기선 중복하지 않는다.
+`README.md` 8.3절 "주요 API"에 정리돼 있다 — 둘 다 CRUD가 단순해 여기선 중복하지 않는다.
 BYOK 요점만: 채팅(`/chat/*`)·스킬 생성(`/skills/create/*`)이 LLM을 호출하기 직전, 로그인
 유저 본인이 등록한 Anthropic 키를 `user_secrets` 테이블에서 복호화해 사용한다. 키가
 없으면 LLM을 호출하지 않고 안내 메시지(또는 `ANTHROPIC_KEY_REQUIRED` 400)를 반환한다 —

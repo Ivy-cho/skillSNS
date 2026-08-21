@@ -2,6 +2,7 @@ services:
   - type: web
     name: skillsns-user-service
     env: docker
+    region: singapore
     plan: free
     branch: develop
     dockerfilePath: ./user-service/Dockerfile
@@ -33,6 +34,7 @@ services:
   - type: web
     name: skillsns-skill-service
     env: docker
+    region: singapore
     plan: free
     branch: develop
     dockerfilePath: ./skill-service/Dockerfile
@@ -58,6 +60,7 @@ services:
   - type: web
     name: skillsns-feed-service
     env: docker
+    region: singapore
     plan: free
     branch: develop
     dockerfilePath: ./feed-service/Dockerfile
@@ -73,6 +76,7 @@ services:
   - type: web
     name: skillsns-frontend
     env: docker
+    region: singapore
     plan: free
     branch: develop
     dockerfilePath: ./frontend/Dockerfile

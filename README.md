@@ -213,6 +213,10 @@ Vercel의 자체 Next.js 빌드가 아니라 `frontend/Dockerfile`로 빌드된 
 2. 대시보드에서 **New → Blueprint** 선택 → 이 저장소 연결
    - `render.yaml`을 자동으로 인식해 4개 서비스(user/skill/feed-service + frontend)를
      생성함 — 전부 `env: docker`라 각자 디렉토리의 `Dockerfile`로 빌드됨
+   - ⚠️ **이름 충돌 주의**: 같은 이름의 서비스를 지웠다가 다시 만들면, Render가 그
+     이름을 바로 안 풀어줘서 뒤에 임의 문자열이 붙은 이름(`skillsns-frontend-xxxx`
+     식)으로 생성될 수 있습니다(Render 쪽 알려진 동작 — 기다려도 안 풀리는 경우가
+     많음). 이 경우 아래 URL들을 실제로 생성된 이름 기준으로 맞춰야 합니다.
 
 3. 각 서비스에서 `sync: false`로 표시된 환경변수를 채워넣습니다 (Dashboard → 서비스 →
    Environment). `value:`가 이미 있는 값(예: `CORS_ORIGINS`, `NEXT_PUBLIC_*`)은

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: skillsns-user-service
+    name: skillsns-user-service-gxrh
     env: docker
     region: singapore
     plan: free
@@ -29,10 +29,10 @@ services:
       - key: CALLBACK_URL
         sync: false
       - key: CORS_ORIGINS
-        value: https://skillsns-frontend.onrender.com,https://skillsns.vercel.app
+        value: https://skillsns-frontend-gxrh.onrender.com,https://skillsns.vercel.app
 
   - type: web
-    name: skillsns-skill-service
+    name: skillsns-skill-service-gxrh
     env: docker
     region: singapore
     plan: free
@@ -55,10 +55,10 @@ services:
       - key: SECRET_ENCRYPTION_KEY
         sync: false
       - key: CORS_ORIGINS
-        value: https://skillsns-frontend.onrender.com,https://skillsns.vercel.app
+        value: https://skillsns-frontend-gxrh.onrender.com,https://skillsns.vercel.app
 
   - type: web
-    name: skillsns-feed-service
+    name: skillsns-feed-service-gxrh
     env: docker
     region: singapore
     plan: free
@@ -71,10 +71,10 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: CORS_ORIGINS
-        value: https://skillsns-frontend.onrender.com,https://skillsns.vercel.app
+        value: https://skillsns-frontend-gxrh.onrender.com,https://skillsns.vercel.app
 
   - type: web
-    name: skillsns-frontend
+    name: skillsns-frontend-gxrh
     env: docker
     region: singapore
     plan: free
@@ -85,8 +85,8 @@ services:
     autoDeploy: false
     envVars:
       - key: NEXT_PUBLIC_BACKEND_URL
-        value: https://skillsns-skill-service.onrender.com
+        value: https://skillsns-skill-service-gxrh.onrender.com
       - key: NEXT_PUBLIC_USER_SERVICE_URL
-        value: https://skillsns-user-service.onrender.com
+        value: https://skillsns-user-service-gxrh.onrender.com
       - key: NEXT_PUBLIC_FEED_SERVICE_URL
-        value: https://skillsns-feed-service.onrender.com
+        value: https://skillsns-feed-service-gxrh.onrender.com

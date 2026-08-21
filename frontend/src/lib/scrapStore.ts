@@ -8,7 +8,7 @@
 // 백엔드 응답이 도착하면 다시 렌더돼 최신 값으로 바뀐다. 스냅샷은 같은 참조를 유지하도록
 // 캐시해 둔다(매번 새 배열을 주면 무한 렌더가 된다).
 
-import { getAccessToken } from "@/lib/authClient";
+import { getFreshAccessToken } from "@/lib/authClient";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
 
@@ -52,7 +52,7 @@ function setScraps(scraps: Scrap[]) {
 }
 
 async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
-  const token = getAccessToken();
+  const token = await getFreshAccessToken();
   const res = await fetch(`${BACKEND_URL}${path}`, {
     ...init,
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init?.headers ?? {}) },

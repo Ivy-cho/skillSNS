@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { BackButton } from "@/components/nav/BackButton";
 import {
-  getAccessToken,
+  getFreshAccessToken,
   getStoredUser,
   updateProfile,
   updateStoredUser,
@@ -70,7 +70,7 @@ export default function ProfileEditPage() {
       return;
     }
 
-    const token = getAccessToken();
+    const token = await getFreshAccessToken();
     if (!token) {
       setError("로그인이 필요해요");
       return;

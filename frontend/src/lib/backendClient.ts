@@ -1,14 +1,15 @@
 // skill-service(/skills/create/*)와의 연동 지점. 화면 동작(UX)만 옛 목업과 같으면 되고,
 // URL/요청 모양은 skill-service의 draft_id 기반 계약을 그대로 따른다.
 
-import { getAccessToken } from "@/lib/authClient";
+import { getFreshAccessToken } from "@/lib/authClient";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
 
 // 로그인 세션이 있을 때만 Authorization을 싣는다 — 없는 채로 보내면 skill-service가
 // 비로그인으로 처리한다(예: /chat은 "로그인이 필요합니다" 안내로 응답).
-function authHeaders(): Record<string, string> {
-  const token = getAccessToken();
+// 만료가 임박했으면 getFreshAccessToken이 알아서 갱신해준다.
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getFreshAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -42,7 +43,7 @@ class BackendError extends Error {}
 async function postForm(path: string, form?: FormData): Promise<CreationResponse> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
     method: "POST",
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: form ?? new FormData(),
   });
   if (!res.ok) {
@@ -54,7 +55,7 @@ async function postForm(path: string, form?: FormData): Promise<CreationResponse
 
 async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -66,7 +67,7 @@ async function getJSON<T>(path: string): Promise<T> {
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
     method: "POST",
-    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -111,7 +112,7 @@ export function retestDraft(draftId: string) {
 export async function confirmDraft(draftId: string): Promise<PublishedSkill> {
   const res = await fetch(`${BACKEND_URL}/skills/create/${draftId}/confirm`, {
     method: "POST",
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -132,11 +133,29 @@ export function listSkills(userId?: string) {
   return getJSON<PublishedSkill[]>(`/skills${query}`);
 }
 
+// 내 스킬 수정 (홈 목록에서 스와이프 → 수정). 소유자만 가능하고, 남의 스킬이면 403이다.
+// 주는 필드만 바뀐다(PATCH). category는 백엔드 SkillUpdate에 없어서 아직 바꿀 수 없다.
+export async function updateSkill(
+  skillId: string,
+  body: { title?: string; description?: string | null; md_content?: string },
+): Promise<SkillDetail> {
+  const res = await fetch(`${BACKEND_URL}/skills/${skillId}`, {
+    method: "PATCH",
+    headers: { ...(await authHeaders()), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new BackendError(errBody.detail ?? `수정하지 못했어요 (${res.status})`);
+  }
+  return res.json();
+}
+
 // 내 스킬 삭제 (홈 목록에서 스와이프 → 삭제). 되돌릴 수 없다.
 export async function deleteSkill(skillId: string): Promise<void> {
   const res = await fetch(`${BACKEND_URL}/skills/${skillId}`, {
     method: "DELETE",
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

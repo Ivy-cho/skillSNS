@@ -1,33 +1,6 @@
-import { Fragment, type ReactNode } from "react";
 import type { ChatMessage } from "./types";
 import { AttachChip } from "./AttachChip";
-
-// 에이전트 메시지에 섞여 오는 **볼드** 마크다운을 실제 볼드로 바꾸고(별표는 제거),
-// 줄바꿈/문단을 살려 가독성 있게 렌더한다.
-function renderRichText(text: string): ReactNode {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  return lines.map((line, i) => {
-    const trimmed = line.trim();
-    // 빈 줄은 문단 사이 여백으로.
-    if (trimmed === "") return <span key={i} className="block h-2" />;
-
-    // **볼드** 구간을 <strong>으로.
-    const parts = line.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
-    return (
-      <span key={i} className="block">
-        {parts.map((seg, j) =>
-          seg.startsWith("**") && seg.endsWith("**") ? (
-            <strong key={j} className="font-semibold">
-              {seg.slice(2, -2)}
-            </strong>
-          ) : (
-            <Fragment key={j}>{seg}</Fragment>
-          )
-        )}
-      </span>
-    );
-  });
-}
+import { Markdown } from "@/components/common/Markdown";
 
 export function ChatBubble({
   message,
@@ -64,7 +37,13 @@ export function ChatBubble({
             : "rounded-bl-md border border-border bg-surface text-ink"
         }`}
       >
-        {renderRichText(message.content)}
+        {isUser ? (
+          // 사용자가 친 글은 그대로 보여준다 — 마크다운으로 해석하면 별표 같은 글자가
+          // 사라진다. 대신 여러 줄 입력(Shift+Enter)이 살아있도록 줄바꿈은 유지한다.
+          <span className="whitespace-pre-wrap">{message.content}</span>
+        ) : (
+          <Markdown text={message.content} />
+        )}
       </div>
     </div>
   );

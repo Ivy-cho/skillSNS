@@ -8,7 +8,7 @@ import { deleteSkill, listSkills, type PublishedSkill } from "@/lib/backendClien
 import { CATEGORIES } from "@/components/skill-creator/types";
 import { ScrapTab } from "@/components/home/ScrapTab";
 import { CreateSkillSheet } from "@/components/home/CreateSkillSheet";
-import { SwipeableSkillItem } from "@/components/home/SwipeableSkillItem";
+import { SwipeableRow } from "@/components/common/SwipeableRow";
 import { getEmptyScraps, getScrapsSnapshot, subscribeScraps } from "@/lib/scrapStore";
 
 function emojiFor(category: string) {
@@ -33,6 +33,8 @@ export default function HomePage() {
 
   const user = getStoredUser();
   const nickname = user?.nickname ?? "나";
+  const avatarUrl = user?.avatar_url ?? null;
+  const bio = user?.bio?.trim() || null;
 
   useEffect(() => {
     let alive = true;
@@ -79,14 +81,24 @@ export default function HomePage() {
       {/* 프로필 */}
       <div className="px-5 pb-4 pt-5">
         <div className="flex items-center gap-3">
-          {/* 프로필 사진은 아직 백엔드에 필드가 없어 기본 아바타로 둔다. */}
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-tint text-2xl">
-            🙂
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-tint text-2xl">
+            {avatarUrl ? (
+              // 아바타는 Supabase 스토리지의 임의 호스트에서 온다. next/image의 remotePatterns에
+              // 환경마다 다른 호스트를 박아두는 대신 그냥 <img>로 띄운다.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              "🙂"
+            )}
           </div>
           <div className="min-w-0">
             <div className="truncate text-[1rem] font-bold text-ink">{nickname}</div>
             <p className="mt-0.5 text-[0.78rem] leading-relaxed text-muted">
-              아직 소개가 없어요
+              {bio ?? "아직 소개가 없어요"}
             </p>
           </div>
         </div>
@@ -150,12 +162,22 @@ export default function HomePage() {
             )}
 
             {skills?.map((skill) => (
-              <SwipeableSkillItem
+              <SwipeableRow
                 key={skill.id}
-                href={`/skill/${skill.id}`}
-                deleting={deletingId === skill.id}
-                onDelete={() => handleDelete(skill.id, skill.title)}
+                actions={[
+                  { label: "수정", href: `/skill/${skill.id}/edit`, tone: "primary" },
+                  {
+                    label: deletingId === skill.id ? "삭제 중" : "삭제",
+                    onClick: () => handleDelete(skill.id, skill.title),
+                    disabled: deletingId === skill.id,
+                    tone: "danger",
+                  },
+                ]}
               >
+                <Link
+                  href={`/skill/${skill.id}`}
+                  className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3"
+                >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-surface-2 text-base">
                   {emojiFor(skill.category)}
                 </span>
@@ -172,7 +194,8 @@ export default function HomePage() {
                     {formatDate(skill.created_at)}
                   </span>
                 </span>
-              </SwipeableSkillItem>
+                </Link>
+              </SwipeableRow>
             ))}
 
             {/* 생성 진입점은 여기 하나만. 누르면 "새로 만들기 / 내 스킬 넣기"로 갈린다. */}

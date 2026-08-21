@@ -111,6 +111,67 @@ export function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_KEY);
 }
 
+// ---- 액세스 토큰 자동 갱신 ----
+// 액세스 토큰은 60분이면 만료되고, refresh token은 7일간 산다. 갱신을 안 하면 로그인
+// 한 시간 뒤부터 인증이 필요한 요청이 전부 실패한다(사진 업로드·폴더 만들기는 401,
+// 스킬 대화는 401이 아니라 "로그인이 필요합니다" 안내 문구가 돌아와서 더 헷갈린다).
+// 그래서 401을 보고 재시도하는 대신, 요청을 보내기 전에 만료가 임박했으면 미리 갱신한다.
+
+const REFRESH_MARGIN_MS = 60_000; // 만료 1분 전부터는 미리 갱신한다
+
+// JWT payload의 exp(초)를 읽는다. 서명은 검증하지 않는다 — 만료 시각만 보면 되고,
+// 진짜 판정은 어차피 서버가 한다.
+function expiryOf(token: string): number | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const exp = (JSON.parse(json) as { exp?: number }).exp;
+    return typeof exp === "number" ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+// 동시에 여러 요청이 갱신을 시도해도 실제 호출은 한 번만 나가게 한다.
+let refreshing: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  if (!refreshToken) return null;
+  try {
+    const { access_token } = await getJSON<{ access_token: string; expires_in: number }>(
+      "/auth/refresh",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      },
+    );
+    localStorage.setItem(ACCESS_KEY, access_token);
+    return access_token;
+  } catch {
+    // refresh token까지 죽었다 = 다시 로그인해야 한다. 세션을 비우면 AuthGate가
+    // /login으로 보낸다. 여기서 라우팅까지 하지는 않는다(이 파일은 화면을 모른다).
+    clearSession();
+    return null;
+  }
+}
+
+// 인증이 필요한 요청은 이걸로 토큰을 얻는다. 만료가 임박했으면 갱신해서 돌려준다.
+export async function getFreshAccessToken(): Promise<string | null> {
+  const token = getAccessToken();
+  if (!token) return null;
+
+  const expiresAt = expiryOf(token);
+  if (expiresAt !== null && expiresAt - Date.now() > REFRESH_MARGIN_MS) return token;
+
+  refreshing ??= refreshAccessToken().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
 export function getStoredUser(): UserInfo | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(USER_KEY);

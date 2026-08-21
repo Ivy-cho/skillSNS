@@ -14,6 +14,7 @@ import {
   subscribeScraps,
 } from "@/lib/scrapStore";
 import { listSkills, type PublishedSkill } from "@/lib/backendClient";
+import { SwipeableRow } from "@/components/common/SwipeableRow";
 
 export function ScrapTab() {
   const folders = useSyncExternalStore(subscribeScraps, getFoldersSnapshot, getEmptyFolders);
@@ -83,11 +84,20 @@ export function ScrapTab() {
           </p>
         ) : (
           items.map((skill) => (
-            <div
+            <SwipeableRow
               key={skill.id}
-              className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3"
+              actions={[
+                {
+                  label: "빼기",
+                  onClick: () => removeScrap(skill.id).catch(() => {}),
+                  tone: "danger",
+                },
+              ]}
             >
-              <Link href={`/skill/${skill.id}`} className="min-w-0 flex-1">
+              <Link
+                href={`/skill/${skill.id}`}
+                className="block rounded-2xl border border-border bg-surface p-3"
+              >
                 <span className="block text-[0.85rem] font-semibold leading-snug text-ink">
                   {skill.title}
                 </span>
@@ -97,15 +107,7 @@ export function ScrapTab() {
                   </span>
                 )}
               </Link>
-              <button
-                type="button"
-                onClick={() => removeScrap(skill.id).catch(() => {})}
-                aria-label="스크랩에서 빼기"
-                className="shrink-0 text-[0.72rem] text-muted underline underline-offset-2"
-              >
-                빼기
-              </button>
-            </div>
+            </SwipeableRow>
           ))
         )}
       </div>
@@ -146,14 +148,28 @@ export function ScrapTab() {
             </button>
           </div>
         ) : (
-          <div
+          <SwipeableRow
             key={folder.id}
-            className="flex items-center gap-2 rounded-2xl border border-border bg-surface p-3"
+            actions={[
+              {
+                label: "이름",
+                onClick: () => {
+                  setRenamingId(folder.id);
+                  setRenameValue(folder.name);
+                },
+                tone: "primary",
+              },
+              {
+                label: "삭제",
+                onClick: () => deleteFolder(folder.id).catch(() => {}),
+                tone: "danger",
+              },
+            ]}
           >
             <button
               type="button"
               onClick={() => setOpenId(folder.id)}
-              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              className="flex w-full items-center gap-2 rounded-2xl border border-border bg-surface p-3 text-left"
             >
               <span className="shrink-0 text-base">📁</span>
               <span className="min-w-0 flex-1 truncate text-[0.85rem] font-semibold text-ink">
@@ -163,26 +179,7 @@ export function ScrapTab() {
                 {countFor(folder.id)}
               </span>
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setRenamingId(folder.id);
-                setRenameValue(folder.name);
-              }}
-              aria-label="폴더 이름 바꾸기"
-              className="shrink-0 text-[0.72rem] text-muted"
-            >
-              이름
-            </button>
-            <button
-              type="button"
-              onClick={() => deleteFolder(folder.id).catch(() => {})}
-              aria-label="폴더 삭제"
-              className="shrink-0 text-[0.72rem] text-muted"
-            >
-              삭제
-            </button>
-          </div>
+          </SwipeableRow>
         )
       )}
 

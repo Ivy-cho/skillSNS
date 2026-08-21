@@ -27,13 +27,13 @@ class ProposedQuestions(BaseModel):
     questions: list[str] = Field(description="실제로 돌려볼 확정된 질문 목록")
 
 
-def make_skill_test_node():
+def make_skill_test_node(api_key: str):
     """04 skill_test 전용 노드 — 나머지 4개와 달리 stage_runner.make_stage_node()로 못 만든다.
     '실제로 돌려본다' 단계는 LLM 한 번 호출이 아니라, 지금까지의 content로 임시 스킬 에이전트를
     띄우고 baseline(스킬 없는) 에이전트와 나란히 돌려본 뒤, 그 결과를 다시 LLM에게 채점시키는
     2단계 오케스트레이션이라 별도 구현이 필요하다."""
 
-    llm = ChatAnthropic(model=settings.ANTHROPIC_MODEL, api_key=settings.ANTHROPIC_API_KEY)
+    llm = ChatAnthropic(model=settings.ANTHROPIC_MODEL, api_key=api_key)
     propose_llm = llm.bind_tools([ProposedQuestions])
     grade_llm = llm.bind_tools([SkillTestOutput])
 
@@ -63,8 +63,8 @@ def make_skill_test_node():
         total_seconds = 0.0
 
         for i, question in enumerate(questions):
-            skill_agent = build_agent(md_content, MemorySaver())
-            baseline_agent = build_agent(BASELINE_PROMPT, MemorySaver())
+            skill_agent = build_agent(md_content, MemorySaver(), api_key)
+            baseline_agent = build_agent(BASELINE_PROMPT, MemorySaver(), api_key)
             skill_cfg = {"configurable": {"thread_id": f"test-skill-{i}"}}
             base_cfg = {"configurable": {"thread_id": f"test-base-{i}"}}
 

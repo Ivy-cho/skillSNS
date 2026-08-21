@@ -16,6 +16,7 @@ from app.api.routes.chat import router as chat_router
 from app.api.routes.scrap import router as scrap_router
 from app.api.routes.skill_creation import router as skill_creation_router
 from app.api.routes.skills import router as skills_router
+from app.api.routes.user_secrets import router as user_secrets_router
 from app.core.config import settings
 from app.db.database import Base, engine
 
@@ -71,6 +72,7 @@ app.include_router(skills_router)
 app.include_router(chat_router)
 app.include_router(skill_creation_router)
 app.include_router(scrap_router)
+app.include_router(user_secrets_router)
 
 
 @app.get("/health")

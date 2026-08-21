@@ -27,8 +27,8 @@ INTEGRATION_INSTRUCTIONS = """
 """
 
 
-def make_name_node(next_stage: Optional[str]):
-    llm = ChatAnthropic(model=settings.ANTHROPIC_MODEL, api_key=settings.ANTHROPIC_API_KEY)
+def make_name_node(next_stage: Optional[str], api_key: str):
+    llm = ChatAnthropic(model=settings.ANTHROPIC_MODEL, api_key=api_key)
     llm_with_tool = llm.bind_tools([NameTurn])
 
     async def node(state: CreatorState) -> dict:

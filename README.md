@@ -138,6 +138,7 @@ CALLBACK_URL=http://localhost:8001/auth/callback
 DATABASE_URL=postgresql+asyncpg://postgres:password@db.your-project.supabase.co:5432/postgres
 JWT_SECRET_KEY=...        # user-service와 반드시 동일한 값
 ANTHROPIC_API_KEY=...
+SECRET_ENCRYPTION_KEY=... # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
 **feed-service/.env**
@@ -232,6 +233,7 @@ Vercel의 자체 Next.js 빌드가 아니라 `frontend/Dockerfile`로 빌드된 
    DATABASE_URL=postgresql+asyncpg://...
    JWT_SECRET_KEY=...    # user-service와 동일한 값
    ANTHROPIC_API_KEY=...
+   SECRET_ENCRYPTION_KEY=...    # 사용자 등록 Anthropic 키 암호화용, 로컬 .env와 별도로 새로 발급 권장
    ```
 
    **skillsns-feed-service**
@@ -351,6 +353,14 @@ DELETE /scrap/folders/{id}        # 폴더 삭제 (안의 스크랩도 함께)
 GET    /scrap                     # 내 스크랩 목록 (?folder_id= 필터)
 POST   /scrap                     # 담기 (이미 있으면 폴더 이동)
 DELETE /scrap/{skill_id}          # 빼기
+```
+
+**user-secrets** (skill-service, prefix `/me`) — BYOK: 대화하는 사람이 자기 Anthropic
+키로 비용을 낸다. 계정 단위로 암호화 저장되어 등록 후엔 어느 기기에서 로그인해도 유지됨.
+```
+GET    /me/anthropic-key    # 등록 여부만 반환 ({ has_key }), 평문은 안 내려줌
+PUT    /me/anthropic-key    # 등록/교체 ({ api_key })
+DELETE /me/anthropic-key    # 삭제
 ```
 
 **feed-service**

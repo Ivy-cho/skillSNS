@@ -1,3 +1,5 @@
+from typing import Optional
+
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -5,8 +7,12 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from app.core.config import settings
 
 
-def build_agent(md_content: str, checkpointer):
-    llm = ChatAnthropic(model=settings.ANTHROPIC_MODEL, api_key=settings.ANTHROPIC_API_KEY)
+def build_agent(md_content: str, checkpointer, api_key: Optional[str] = None):
+    # api_key를 아예 안 넘기면(예: 대화 기록만 읽고 LLM은 안 부르는 호출) langchain이 서버
+    # 기본 ANTHROPIC_API_KEY 환경변수로 폴백한다 — api_key=None을 명시적으로 넘기면 그
+    # 폴백이 안 먹고 오히려 pydantic 검증 에러가 난다.
+    kwargs = {"api_key": api_key} if api_key else {}
+    llm = ChatAnthropic(model=settings.ANTHROPIC_MODEL, **kwargs)
 
     async def call_model(state: MessagesState):
         system = SystemMessage(

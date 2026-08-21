@@ -19,11 +19,14 @@ from app.schemas.skill import (
     ChatSessionSummary,
     MessageItem,
 )
+from app.services.user_secrets import get_user_anthropic_key
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 bearer_scheme = HTTPBearer(auto_error=False)
 
 UNAUTHENTICATED_REPLY = "전문가와 대화하려면 로그인이 필요합니다."
+# 대화하는 사람이 자기 Anthropic API 키로 비용을 낸다 — 서버 공용 키로 몰래 폴백하지 않는다.
+NO_API_KEY_REPLY = "대화하려면 먼저 프로필에서 본인 Anthropic API 키를 등록해주세요."
 
 
 def _get_user_id(credentials: Optional[HTTPAuthorizationCredentials]) -> Optional[str]:
@@ -46,6 +49,9 @@ async def start_chat(
     user_id = _get_user_id(credentials)
     if not user_id:
         return ChatResponse(session_id=None, reply=UNAUTHENTICATED_REPLY)
+    api_key = await get_user_anthropic_key(user_id, db)
+    if not api_key:
+        return ChatResponse(session_id=None, reply=NO_API_KEY_REPLY)
 
     result = await db.execute(select(Skill).where(Skill.id == skill_id))
     skill = result.scalar_one_or_none()
@@ -58,7 +64,7 @@ async def start_chat(
     await db.commit()
     await db.refresh(session)
 
-    agent = build_agent(skill.md_content, request.app.state.checkpointer)
+    agent = build_agent(skill.md_content, request.app.state.checkpointer, api_key)
     config = {"configurable": {"thread_id": thread_id}}
     result_state = await agent.ainvoke({"messages": [HumanMessage(content=body.message)]}, config)
     reply = result_state["messages"][-1].content
@@ -78,6 +84,9 @@ async def continue_chat(
     user_id = _get_user_id(credentials)
     if not user_id:
         return ChatResponse(session_id=None, reply=UNAUTHENTICATED_REPLY)
+    api_key = await get_user_anthropic_key(user_id, db)
+    if not api_key:
+        return ChatResponse(session_id=None, reply=NO_API_KEY_REPLY)
 
     result = await db.execute(select(Skill).where(Skill.id == skill_id))
     skill = result.scalar_one_or_none()
@@ -95,7 +104,7 @@ async def continue_chat(
     if session.user_id != user_id:
         raise HTTPException(status_code=403, detail="FORBIDDEN")
 
-    agent = build_agent(skill.md_content, request.app.state.checkpointer)
+    agent = build_agent(skill.md_content, request.app.state.checkpointer, api_key)
     config = {"configurable": {"thread_id": session.thread_id}}
     result_state = await agent.ainvoke({"messages": [HumanMessage(content=body.message)]}, config)
     reply = result_state["messages"][-1].content

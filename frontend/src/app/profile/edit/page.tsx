@@ -11,6 +11,7 @@ import {
   updateStoredUser,
   uploadAvatar,
 } from "@/lib/authClient";
+import { clearAnthropicKey, hasAnthropicKey, saveAnthropicKey } from "@/lib/anthropicKey";
 
 const NICKNAME_MAX = 20;
 const BIO_MAX = 80;
@@ -24,6 +25,12 @@ export default function ProfileEditPage() {
 
   const [nickname, setNickname] = useState("");
   const [bio, setBio] = useState("");
+  // 계정 단위로 서버(skill-service)에 암호화 저장된다 — 스킬 대화·생성 비용을 본인 키로
+  // 낸다. 평문은 저장 후 다시 안 내려오므로, 이 입력창은 항상 빈 채로 시작하고
+  // keyRegistered로 등록 여부만 보여준다.
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [keyRegistered, setKeyRegistered] = useState<boolean | null>(null);
+  const [clearingKey, setClearingKey] = useState(false);
   // 새로 고른 사진: 서버에 올리기 전까지는 화면에만 미리보기로 보여준다.
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [pickedFile, setPickedFile] = useState<File | null>(null);
@@ -41,6 +48,23 @@ export default function ProfileEditPage() {
     setBio(user.bio ?? "");
     setAvatarUrl(user.avatar_url ?? null);
     /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+
+  // Anthropic 키는 평문이 안 내려오니 등록 여부만 서버에 물어본다.
+  useEffect(() => {
+    const token = getAccessToken();
+    if (!token) return;
+    let alive = true;
+    hasAnthropicKey(token)
+      .then((has) => {
+        if (alive) setKeyRegistered(has);
+      })
+      .catch(() => {
+        if (alive) setKeyRegistered(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   // 새로 고른 사진의 미리보기 URL은 파일에서 바로 파생되는 값이라 렌더 중 계산하고,
@@ -65,11 +89,6 @@ export default function ProfileEditPage() {
   async function handleSave() {
     setError(null);
 
-    if (!PROFILE_SAVE_ENABLED) {
-      setNotice("프로필 저장은 백엔드 준비 중이에요. 화면과 입력은 미리 만들어 뒀어요.");
-      return;
-    }
-
     const token = getAccessToken();
     if (!token) {
       setError("로그인이 필요해요");
@@ -78,6 +97,19 @@ export default function ProfileEditPage() {
 
     setSaving(true);
     try {
+      // 빈칸이면 기존 키를 그대로 둔다(등록 여부만 보여주고 평문은 안 내려오니, 안
+      // 건드리면 바꾸지 않는 게 맞다). 값을 입력했을 때만 교체한다.
+      if (anthropicKey.trim()) {
+        await saveAnthropicKey(token, anthropicKey);
+        setKeyRegistered(true);
+        setAnthropicKey("");
+      }
+
+      if (!PROFILE_SAVE_ENABLED) {
+        setNotice("프로필 저장은 백엔드 준비 중이에요. 화면과 입력은 미리 만들어 뒀어요.");
+        return;
+      }
+
       let uploadedUrl: string | undefined;
       if (pickedFile) uploadedUrl = await uploadAvatar(token, pickedFile);
 
@@ -92,6 +124,21 @@ export default function ProfileEditPage() {
       setError(e instanceof Error ? e.message : "저장하지 못했어요");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleClearKey() {
+    const token = getAccessToken();
+    if (!token) return;
+    setClearingKey(true);
+    setError(null);
+    try {
+      await clearAnthropicKey(token);
+      setKeyRegistered(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "삭제하지 못했어요");
+    } finally {
+      setClearingKey(false);
     }
   }
 
@@ -200,6 +247,39 @@ export default function ProfileEditPage() {
               placeholder="어떤 노하우를 나누는지 한두 줄로 적어주세요"
               className="mt-1.5 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2.5 text-base leading-relaxed text-ink focus:border-primary focus:outline-none sm:text-[0.85rem]"
             />
+          </div>
+
+          {/* Anthropic API 키 — 계정 단위로 서버에 암호화 저장됨 */}
+          <div className="mt-4">
+            <div className="flex items-baseline justify-between">
+              <label htmlFor="anthropicKey" className="text-[0.8rem] font-semibold text-ink">
+                내 Anthropic API 키
+              </label>
+              {keyRegistered && (
+                <button
+                  type="button"
+                  onClick={handleClearKey}
+                  disabled={clearingKey}
+                  className="text-[0.72rem] text-muted underline underline-offset-2 disabled:opacity-40"
+                >
+                  {clearingKey ? "삭제 중…" : "삭제"}
+                </button>
+              )}
+            </div>
+            <input
+              id="anthropicKey"
+              type="password"
+              value={anthropicKey}
+              onChange={(e) => setAnthropicKey(e.target.value)}
+              placeholder={keyRegistered ? "등록됨 · 바꾸려면 새로 입력" : "sk-ant-..."}
+              autoComplete="off"
+              className="mt-1.5 w-full rounded-lg border border-border bg-surface px-3 py-2.5 font-mono text-base text-ink focus:border-primary focus:outline-none sm:text-[0.85rem]"
+            />
+            <p className="mt-1.5 text-[0.72rem] leading-relaxed text-muted">
+              스킬과 대화하거나 스킬을 만들 때 이 키로 비용이 청구됩니다. 계정에 암호화해서
+              저장되어 어느 기기에서 로그인해도 다시 입력할 필요는 없어요 —
+              console.anthropic.com에서 발급받을 수 있습니다.
+            </p>
           </div>
 
           {notice && (

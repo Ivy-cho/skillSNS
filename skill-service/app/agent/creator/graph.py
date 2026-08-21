@@ -29,19 +29,21 @@ def route_by_current_stage(state: CreatorState) -> str:
     return state["stage"]
 
 
-def build_creator_graph(checkpointer):
+def build_creator_graph(checkpointer, api_key: str):
     builder = StateGraph(CreatorState)
 
     for stage_name, (prompt_file, output_model, merge, next_stage) in STAGES.items():
-        builder.add_node(stage_name, make_stage_node(prompt_file, output_model, merge, next_stage))
+        builder.add_node(
+            stage_name, make_stage_node(prompt_file, output_model, merge, next_stage, api_key)
+        )
         builder.add_edge(stage_name, END)
 
     # skill_name: 이름 후보(choices)를 확정 전에도 구조화해서 보여줄 수 있어야 해서 전용 노드.
-    builder.add_node("skill_name", make_name_node("skill_test"))
+    builder.add_node("skill_name", make_name_node("skill_test", api_key))
     builder.add_edge("skill_name", END)
 
     # skill_test: 자체 오케스트레이션이 필요해 stage_runner가 아니라 test_node.py로 만든다.
-    builder.add_node("skill_test", make_skill_test_node())
+    builder.add_node("skill_test", make_skill_test_node(api_key))
     builder.add_edge("skill_test", END)
 
     all_stage_names = [*STAGES.keys(), "skill_name", "skill_test"]

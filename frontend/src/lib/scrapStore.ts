@@ -16,6 +16,10 @@ export type ScrapFolder = {
   id: string;
   name: string;
   createdAt: string;
+  // 폴더 안 스킬 개수. 백엔드가 DB에서 매번 다시 세어 내려주는 값을 그대로 쓴다 —
+  // 담긴 스킬 자체가 삭제되면(DB가 cascade로 scrap도 함께 지움) 그 수만큼 줄어야 하므로,
+  // 화면은 이 값만 보고 별도로 scraps 배열 길이를 세지 않는다.
+  skillCount: number;
 };
 
 export type Scrap = {
@@ -72,7 +76,12 @@ async function load() {
     ]);
     const folders: FolderDTO[] = await folderRes.json();
     const scraps: ScrapDTO[] = await scrapRes.json();
-    folderCache = folders.map((f) => ({ id: f.id, name: f.name, createdAt: f.created_at }));
+    folderCache = folders.map((f) => ({
+      id: f.id,
+      name: f.name,
+      createdAt: f.created_at,
+      skillCount: f.skill_count,
+    }));
     scrapCache = scraps.map((s) => ({ skillId: s.skill_id, folderId: s.folder_id, addedAt: s.added_at }));
     loaded = true;
     notify();
@@ -117,7 +126,12 @@ function tempId() {
 // (호출부가 await 하는 한) 낙관적 임시 id가 새어나가지 않는다.
 export async function createFolder(name: string): Promise<ScrapFolder> {
   const trimmed = name.trim();
-  const optimistic: ScrapFolder = { id: tempId(), name: trimmed, createdAt: new Date().toISOString() };
+  const optimistic: ScrapFolder = {
+    id: tempId(),
+    name: trimmed,
+    createdAt: new Date().toISOString(),
+    skillCount: 0,
+  };
   setFolders([...folderCache, optimistic]);
   try {
     const res = await authedFetch("/scrap/folders", {
@@ -126,7 +140,12 @@ export async function createFolder(name: string): Promise<ScrapFolder> {
       body: JSON.stringify({ name: trimmed }),
     });
     const dto: FolderDTO = await res.json();
-    const real: ScrapFolder = { id: dto.id, name: dto.name, createdAt: dto.created_at };
+    const real: ScrapFolder = {
+      id: dto.id,
+      name: dto.name,
+      createdAt: dto.created_at,
+      skillCount: dto.skill_count,
+    };
     setFolders(folderCache.map((f) => (f.id === optimistic.id ? real : f)));
     return real;
   } catch (err) {
@@ -166,12 +185,26 @@ export async function deleteFolder(id: string): Promise<void> {
   }
 }
 
+function bumpSkillCount(folderId: string, delta: number) {
+  setFolders(
+    folderCache.map((f) =>
+      f.id === folderId ? { ...f, skillCount: Math.max(0, f.skillCount + delta) } : f
+    )
+  );
+}
+
 // ---- 스크랩 ----
 // 한 스킬은 폴더 하나에만 담긴다 — 다시 담으면 폴더를 옮기는 셈(백엔드도 동일 규칙).
 export async function addScrap(skillId: string, folderId: string): Promise<void> {
-  const before = scrapCache;
+  const beforeScraps = scrapCache;
+  const beforeFolders = folderCache;
+  const prev = scrapCache.find((s) => s.skillId === skillId);
   const rest = scrapCache.filter((s) => s.skillId !== skillId);
   setScraps([...rest, { skillId, folderId, addedAt: new Date().toISOString() }]);
+  if (prev?.folderId !== folderId) {
+    if (prev) bumpSkillCount(prev.folderId, -1);
+    bumpSkillCount(folderId, 1);
+  }
   try {
     await authedFetch("/scrap", {
       method: "POST",
@@ -179,18 +212,32 @@ export async function addScrap(skillId: string, folderId: string): Promise<void>
       body: JSON.stringify({ skill_id: skillId, folder_id: folderId }),
     });
   } catch (err) {
-    setScraps(before);
+    setScraps(beforeScraps);
+    setFolders(beforeFolders);
     throw err;
   }
 }
 
 export async function removeScrap(skillId: string): Promise<void> {
-  const before = scrapCache;
+  const beforeScraps = scrapCache;
+  const beforeFolders = folderCache;
+  const prev = scrapCache.find((s) => s.skillId === skillId);
   setScraps(scrapCache.filter((s) => s.skillId !== skillId));
+  if (prev) bumpSkillCount(prev.folderId, -1);
   try {
     await authedFetch(`/scrap/${skillId}`, { method: "DELETE" });
   } catch (err) {
-    setScraps(before);
+    setScraps(beforeScraps);
+    setFolders(beforeFolders);
     throw err;
   }
+}
+
+// 스킬 자체가 삭제됐을 때(홈 "내 스킬" 삭제) 호출. DB는 scraps.skill_id의
+// ON DELETE CASCADE로 이미 정리되므로, 로컬 캐시도 재조회 없이 곧장 맞춰준다.
+export function notifySkillDeleted(skillId: string): void {
+  const scrap = scrapCache.find((s) => s.skillId === skillId);
+  if (!scrap) return;
+  setScraps(scrapCache.filter((s) => s.skillId !== skillId));
+  bumpSkillCount(scrap.folderId, -1);
 }

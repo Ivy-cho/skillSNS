@@ -26,6 +26,7 @@
 | 스킬 스크랩 + 폴더 | ✅ `GET/POST/PATCH/DELETE /scrap`, `/scrap/folders` 구현 완료(아래 4번). `scrapStore.ts`가 localStorage 대신 API 호출 |
 | 피드 | ✅ 신규 feed-service(8003) `GET /feed` 구현 완료(아래 5-1번). `feedData.ts`가 mock 대신 API 호출, 트렌딩 칩도 실데이터에서 파생 |
 | 채팅 목록 | ✅ `GET /chat/sessions` 구현 완료(아래 5-2번). `chatData.ts`가 mock 대신 API 호출 |
+| LLM 키 (BYOK) | ✅ 스킬 대화·생성 비용을 대화하는 사람 본인의 Anthropic 키로 청구(아래 6번). `PUT/GET/DELETE /me/anthropic-key` |
 | 피드 검색 | ⚠️ 프론트에서 불러온 피드 카드 안에서 걸러내는 방식(제목·소개·작성자·카테고리). 스킬이 많아지면 서버 검색 필요 — 아래 항목 참고 |
 | 인증 | ✅ 실 로그인 세션의 access token을 그대로 사용. `NEXT_PUBLIC_DEV_TOKEN` 우회 코드는 제거됨 |
 
@@ -326,3 +327,37 @@ Authorization: Bearer <access_token>
 방식으로 꺼내옵니다. `summary`는 만들지 않음 — 프론트가 `Conversation.summary`를 빈
 문자열로 두면 `ChatListItem`이 알아서 그 줄을 숨기고 마지막 메시지만 보여줍니다.
 `avatar`는 `category`를 skill-creator `CATEGORIES`의 이모지로 매핑해서 프론트가 만듭니다.
+
+---
+
+## ✅ 6. LLM 키를 사용자 본인이 등록해서 쓰도록 변경 (BYOK) (완료, 2026-08-21)
+
+토이 프로젝트라 여러 명이 같이 쓰는데, 서버 공용 Anthropic 키 하나로는 크레딧이 금방
+마릅니다(실제로 겪음). **원칙: 대화하는 사람이 자기 키로 비용을 낸다.** 스킬을 만든
+사람이 아니라 그 순간 대화/생성을 실행하는 사람 기준입니다.
+
+**저장 방식**: 처음엔 브라우저 localStorage 안만 고려했는데, "로그인만 하면 어느
+기기·브라우저에서든 다시 입력 안 해도 되게" 요구사항이 있어서 **서버(skill-service)에
+계정(user_id) 단위로 암호화 저장**하는 걸로 바꿨습니다.
+
+```
+GET    /me/anthropic-key    → { has_key: boolean }         (평문은 절대 안 돌려줌)
+PUT    /me/anthropic-key    { api_key }  → 등록/교체
+DELETE /me/anthropic-key    → 삭제
+```
+- 새 테이블 `user_secrets(user_id, anthropic_api_key_encrypted, updated_at)` — skill-service
+  소유, `Fernet`(대칭키) 암호화. 암호화 키는 `SECRET_ENCRYPTION_KEY` 환경변수
+  (`Fernet.generate_key()`로 발급, `JWT_SECRET_KEY`와 동급으로 취급 — 유출되면 저장된 모든
+  사용자 키가 복호화 가능해짐).
+- 프론트는 이제 이 키를 매 요청 실어 보내지 않습니다 — `/chat/*`, `/skills/create/*`
+  호출 시 skill-service가 JWT의 `user_id`로 DB에서 직접 찾아 씁니다.
+- 등록 안 했으면: `/chat/*`은 "먼저 프로필에서 본인 Anthropic API 키를 등록해주세요"
+  안내만 반환(로그인 안 했을 때와 같은 패턴, LLM 호출 안 함). `/skills/create/*`는
+  400 `ANTHROPIC_KEY_REQUIRED`.
+- 프로필 편집 화면(`/profile/edit`)에 입력창 추가 — 평문이 안 내려오니 항상 빈칸으로
+  시작하고 등록 여부만 placeholder로 보여줌, 빈칸으로 저장하면 기존 값 유지(안 건드림).
+- 서버 로그(uvicorn 기본 access log)에 이 값이 안 찍히는 것 확인함.
+
+**남은 보안 트레이드오프**: DB와 `SECRET_ENCRYPTION_KEY`(환경변수)가 **동시에** 털리면
+암호화가 무력화됩니다 — 별도 KMS 없이 앱 자체 대칭키만 쓰는 수준이라, 토이 프로젝트
+규모에서 적절한 선이지 프로덕션급 시크릿 매니지먼트는 아닙니다.

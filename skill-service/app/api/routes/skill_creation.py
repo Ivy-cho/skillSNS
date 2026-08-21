@@ -15,6 +15,7 @@ from app.models.skill import Skill, SkillDraft
 from app.schemas.creation import CreationResponse
 from app.schemas.skill import SkillSummary
 from app.services.ingest import IngestError, fetch_url_text, ingest_file
+from app.services.user_secrets import get_user_anthropic_key
 
 router = APIRouter(prefix="/skills/create", tags=["skill-creation"])
 bearer_scheme = HTTPBearer()
@@ -25,6 +26,15 @@ def _get_user_id(credentials: HTTPAuthorizationCredentials) -> str:
     if not payload or payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="UNAUTHORIZED")
     return payload["sub"]
+
+
+# 스킬 만들기는 첫 호출부터 끝까지 전부 LLM 호출이라, 로그인처럼 "안내만 반환"할 여지가
+# 없다 — 대화하는 사람이 자기 키로 낸다는 원칙에 따라 키가 없으면 바로 막는다.
+async def _require_anthropic_key(user_id: str, db: AsyncSession) -> str:
+    api_key = await get_user_anthropic_key(user_id, db)
+    if not api_key:
+        raise HTTPException(status_code=400, detail="ANTHROPIC_KEY_REQUIRED")
+    return api_key
 
 
 async def _combine_sources(message: str, links: list[str], files: list[UploadFile]) -> str:
@@ -64,9 +74,13 @@ async def _load_draft(draft_id: str, user_id: str, db: AsyncSession) -> SkillDra
 
 
 async def _invoke(
-    request: Request, db: AsyncSession, draft: SkillDraft, human_message: Optional[str]
+    request: Request,
+    db: AsyncSession,
+    draft: SkillDraft,
+    human_message: Optional[str],
+    api_key: str,
 ) -> CreationResponse:
-    agent = build_creator_graph(request.app.state.checkpointer)
+    agent = build_creator_graph(request.app.state.checkpointer, api_key)
     config = {"configurable": {"thread_id": draft.thread_id}}
 
     # Anthropic API는 system만 있고 messages가 비어있으면 400을 낸다. 카테고리 선택 직후처럼
@@ -99,6 +113,7 @@ async def start_draft(
     db: AsyncSession = Depends(get_db),
 ):
     user_id = _get_user_id(credentials)
+    api_key = await _require_anthropic_key(user_id, db)
     draft = SkillDraft(
         user_id=user_id,
         thread_id=str(uuid.uuid4()),
@@ -108,7 +123,7 @@ async def start_draft(
     db.add(draft)
     await db.commit()
     await db.refresh(draft)
-    return await _invoke(request, db, draft, human_message=None)
+    return await _invoke(request, db, draft, human_message=None, api_key=api_key)
 
 
 @router.post("/{draft_id}", response_model=CreationResponse)
@@ -122,13 +137,14 @@ async def continue_draft(
     db: AsyncSession = Depends(get_db),
 ):
     user_id = _get_user_id(credentials)
+    api_key = await _require_anthropic_key(user_id, db)
     draft = await _load_draft(draft_id, user_id, db)
 
     combined = await _combine_sources(message, links, files)
     if not combined:
         raise HTTPException(status_code=422, detail="EMPTY_REQUEST")
 
-    return await _invoke(request, db, draft, human_message=combined)
+    return await _invoke(request, db, draft, human_message=combined, api_key=api_key)
 
 
 @router.post("/{draft_id}/improve", response_model=CreationResponse)
@@ -140,6 +156,7 @@ async def improve_draft(
 ):
     """04(skill_test) 결과를 보고 사용자가 "개선할게요"를 눌렀을 때."""
     user_id = _get_user_id(credentials)
+    api_key = await _require_anthropic_key(user_id, db)
     draft = await _load_draft(draft_id, user_id, db)
     if draft.stage != "skill_test" or not draft.skill_info.get("testReport"):
         raise HTTPException(status_code=409, detail="NOT_READY_TO_IMPROVE")
@@ -147,7 +164,7 @@ async def improve_draft(
     draft.stage = "skill_improve"
     await db.commit()
     await db.refresh(draft)
-    return await _invoke(request, db, draft, human_message=None)
+    return await _invoke(request, db, draft, human_message=None, api_key=api_key)
 
 
 @router.post("/{draft_id}/retest", response_model=CreationResponse)
@@ -159,6 +176,7 @@ async def retest_draft(
 ):
     """05(skill_improve) 이후 사용자가 "다시 테스트"를 눌렀을 때."""
     user_id = _get_user_id(credentials)
+    api_key = await _require_anthropic_key(user_id, db)
     draft = await _load_draft(draft_id, user_id, db)
     if draft.stage != "skill_improve":
         raise HTTPException(status_code=409, detail="NOT_READY_TO_RETEST")
@@ -167,7 +185,11 @@ async def retest_draft(
     await db.commit()
     await db.refresh(draft)
     return await _invoke(
-        request, db, draft, human_message="(재테스트 시작) 개선된 내용을 반영해서 테스트를 처음부터 다시 진행해주세요."
+        request,
+        db,
+        draft,
+        human_message="(재테스트 시작) 개선된 내용을 반영해서 테스트를 처음부터 다시 진행해주세요.",
+        api_key=api_key,
     )
 
 

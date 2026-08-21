@@ -16,6 +16,7 @@ def make_stage_node(
     output_model: Type[BaseModel],
     merge: Callable[[dict, dict], dict],
     next_stage: Optional[str],
+    api_key: str,
 ):
     """what_skill/skill_content/skill_improve 3개 노드가 공유하는 실행기 (skill_name은
     choices/summary가 필요해 name_node.py로 따로 만든다).
@@ -28,7 +29,7 @@ def make_stage_node(
         하나만 처리하고 매번 여기서 끝난다 — 다음 단계로 넘어갈지는 클라이언트가 다음
         요청을 보낼 때 결정한다.
     """
-    llm = ChatAnthropic(model=settings.ANTHROPIC_MODEL, api_key=settings.ANTHROPIC_API_KEY)
+    llm = ChatAnthropic(model=settings.ANTHROPIC_MODEL, api_key=api_key)
     llm_with_tool = llm.bind_tools([output_model])
 
     async def node(state: CreatorState) -> dict:

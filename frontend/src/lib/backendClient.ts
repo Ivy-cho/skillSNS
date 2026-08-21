@@ -6,7 +6,9 @@ import { getFreshAccessToken } from "@/lib/authClient";
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
 
 // 로그인 세션이 있을 때만 Authorization을 싣는다 — 없는 채로 보내면 skill-service가
-// 비로그인으로 처리한다(예: /chat은 "로그인이 필요합니다" 안내로 응답).
+// 비로그인으로 처리한다(예: /chat은 "로그인이 필요합니다" 안내로 응답). 대화·생성
+// 비용에 쓰는 Anthropic 키는 이제 skill-service가 user_id로 DB에서 직접 찾아 쓴다
+// (계정 단위로 암호화 저장돼 있어 클라이언트가 매 요청 실어 보낼 필요가 없다).
 // 만료가 임박했으면 getFreshAccessToken이 알아서 갱신해준다.
 async function authHeaders(): Promise<Record<string, string>> {
   const token = await getFreshAccessToken();
@@ -40,6 +42,17 @@ export type ChatResponse = {
 
 class BackendError extends Error {}
 
+// skill-service가 detail로 내려주는 코드성 문자열 중 화면에 그대로 보여주면 안 되는
+// 것들만 한국어 안내로 바꾼다. 나머지는 detail을 그대로 쓴다.
+const DETAIL_MESSAGES: Record<string, string> = {
+  ANTHROPIC_KEY_REQUIRED: "스킬을 만들려면 먼저 프로필에서 본인 Anthropic API 키를 등록해주세요.",
+};
+
+function friendlyDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return DETAIL_MESSAGES[detail] ?? detail;
+  return fallback;
+}
+
 async function postForm(path: string, form?: FormData): Promise<CreationResponse> {
   const res = await fetch(`${BACKEND_URL}${path}`, {
     method: "POST",
@@ -48,7 +61,7 @@ async function postForm(path: string, form?: FormData): Promise<CreationResponse
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new BackendError(body.detail ?? `요청이 실패했어요 (${res.status})`);
+    throw new BackendError(friendlyDetail(body.detail, `요청이 실패했어요 (${res.status})`));
   }
   return res.json();
 }
@@ -59,7 +72,7 @@ async function getJSON<T>(path: string): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new BackendError(body.detail ?? `요청이 실패했어요 (${res.status})`);
+    throw new BackendError(friendlyDetail(body.detail, `요청이 실패했어요 (${res.status})`));
   }
   return res.json();
 }
@@ -72,7 +85,7 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
-    throw new BackendError(errBody.detail ?? `요청이 실패했어요 (${res.status})`);
+    throw new BackendError(friendlyDetail(errBody.detail, `요청이 실패했어요 (${res.status})`));
   }
   return res.json();
 }
@@ -116,7 +129,7 @@ export async function confirmDraft(draftId: string): Promise<PublishedSkill> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new BackendError(body.detail ?? `확정에 실패했어요 (${res.status})`);
+    throw new BackendError(friendlyDetail(body.detail, `확정에 실패했어요 (${res.status})`));
   }
   return res.json();
 }
@@ -146,7 +159,7 @@ export async function updateSkill(
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
-    throw new BackendError(errBody.detail ?? `수정하지 못했어요 (${res.status})`);
+    throw new BackendError(friendlyDetail(errBody.detail, `수정하지 못했어요 (${res.status})`));
   }
   return res.json();
 }
@@ -159,7 +172,7 @@ export async function deleteSkill(skillId: string): Promise<void> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new BackendError(body.detail ?? `삭제하지 못했어요 (${res.status})`);
+    throw new BackendError(friendlyDetail(body.detail, `삭제하지 못했어요 (${res.status})`));
   }
 }
 

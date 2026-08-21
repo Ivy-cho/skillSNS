@@ -2,8 +2,9 @@ services:
   - type: web
     name: skillsns-user-service
     env: docker
+    region: singapore
     plan: free
-    branch: backend
+    branch: develop
     dockerfilePath: ./user-service/Dockerfile
     dockerContext: ./user-service
     healthCheckPath: /health
@@ -27,12 +28,15 @@ services:
         value: "7"
       - key: CALLBACK_URL
         sync: false
+      - key: CORS_ORIGINS
+        value: https://skillsns-frontend.onrender.com,https://skillsns.vercel.app
 
   - type: web
     name: skillsns-skill-service
     env: docker
+    region: singapore
     plan: free
-    branch: backend
+    branch: develop
     dockerfilePath: ./skill-service/Dockerfile
     dockerContext: ./skill-service
     healthCheckPath: /health
@@ -48,12 +52,17 @@ services:
         sync: false
       - key: ANTHROPIC_MODEL
         value: claude-sonnet-4-6
+      - key: SECRET_ENCRYPTION_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://skillsns-frontend.onrender.com,https://skillsns.vercel.app
 
   - type: web
     name: skillsns-feed-service
     env: docker
+    region: singapore
     plan: free
-    branch: backend
+    branch: develop
     dockerfilePath: ./feed-service/Dockerfile
     dockerContext: ./feed-service
     healthCheckPath: /health
@@ -61,3 +70,23 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: CORS_ORIGINS
+        value: https://skillsns-frontend.onrender.com,https://skillsns.vercel.app
+
+  - type: web
+    name: skillsns-frontend
+    env: docker
+    region: singapore
+    plan: free
+    branch: develop
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    healthCheckPath: /
+    autoDeploy: false
+    envVars:
+      - key: NEXT_PUBLIC_BACKEND_URL
+        value: https://skillsns-skill-service.onrender.com
+      - key: NEXT_PUBLIC_USER_SERVICE_URL
+        value: https://skillsns-user-service.onrender.com
+      - key: NEXT_PUBLIC_FEED_SERVICE_URL
+        value: https://skillsns-feed-service.onrender.com

@@ -1,8 +1,9 @@
 # skillSNS
 
 > 🚧 **개발 진행중** — 핵심 기능(로그인, 스킬 생성 파이프라인, 대화, 피드, 스크랩, 채팅
-> 목록)은 실 DB와 붙어 동작하지만, 아직 프로덕션 배포 전 마무리 단계다. 진행 상황은
-> [`frontend/BACKEND_HANDOFF.md`](frontend/BACKEND_HANDOFF.md)에 실시간으로 정리하고 있다.
+> 목록, BYOK)은 실 DB와 붙어 Render에 배포되어 동작한다. 백엔드는 사실상 마무리 단계고,
+> 프론트에 아직 안 붙인 항목들은 [`frontend/FRONTEND_HANDOFF.md`](frontend/FRONTEND_HANDOFF.md)에
+> 정리하고 있다.
 
 **개인이 가진 기술(노하우)을 나누고, 다른 사람의 기술을 이용할 수 있는 서비스**를
 기획하고 MSA 구조로 직접 구현했다. 사용자는 자신의 전문성을 AI 챗봇 형태의 "스킬"로
@@ -37,7 +38,9 @@
 - **스킬과 대화하기** — 게시된 스킬의 시스템 프롬프트로 실제 LLM과 대화. 대화 세션은
   LangGraph의 Postgres 체크포인터에 저장되어 이어서 대화할 수 있다.
 - **피드** — 전체 공개 스킬을 최신순으로 보여주고, 제목·소개·작성자·카테고리로
-  검색. 상단 "요즘 뜨는 스킬"은 조회수 기준(동률이면 이름순) 트렌딩.
+  DB 서버 사이드 검색(`ILIKE`) + `limit`/`offset` 페이징 지원. 상단 "요즘 뜨는 스킬"은
+  조회수 기준(동률이면 이름순) 트렌딩. (프론트는 아직 서버 검색/페이징에 안 붙어있음 —
+  `frontend/FRONTEND_HANDOFF.md` 참고)
 - **스크랩 + 폴더** — 마음에 드는 스킬을 폴더별로 정리해서 담아둔다.
 - **채팅 목록** — 내가 대화해본 스킬들을 최근 대화순으로 모아본다.
 - **소셜 로그인 + 프로필** — 카카오/구글 로그인, 닉네임·소개글·프로필 사진 편집.
@@ -323,6 +326,8 @@ git push (backend / frontend / main 브랜치), 또는 위 4개 브랜치로의 
 GET  /auth/login/{provider}    # provider: google / kakao
 GET  /auth/callback            # OAuth 콜백 (자동 처리됨)
 GET  /auth/me                  # 현재 로그인 사용자 정보
+PATCH /auth/me                 # 닉네임/소개글/프로필사진URL 수정
+POST /auth/me/avatar           # 프로필 사진 업로드 (512px 리사이즈 + JPEG 통일, Supabase Storage)
 POST /auth/refresh             # Access Token 갱신
 POST /auth/logout              # 로그아웃
 ```
@@ -338,6 +343,7 @@ GET    /skills/{id}/download          # MD 파일 다운로드
 POST   /chat/{skill_id}               # 새 대화 시작
 POST   /chat/{skill_id}/{session_id}  # 대화 이어가기
 GET    /chat/{skill_id}/{session_id}  # 대화 기록 조회
+GET    /chat/{skill_id}/latest        # 이 스킬의 최근 세션 이어보기 (없으면 null)
 GET    /chat/sessions                 # 내 대화 목록 (채팅 목록 화면)
 
 POST   /skills/create                       # 스킬 만들기 시작 (카테고리 선택)
@@ -369,7 +375,9 @@ DELETE /me/anthropic-key    # 삭제
 
 **feed-service**
 ```
-GET /feed    # 스킬 피드 (작성자 닉네임·스크랩 수 포함, 최신순)
+GET /feed?q=&limit=20&offset=0    # 스킬 피드 (작성자 닉네임·스크랩 수 포함)
+                                   # q: 제목/소개/카테고리/작성자 닉네임 ILIKE 검색 (생략 가능)
+                                   # limit/offset: 페이징 (기본 20/0, 응답 길이<limit이면 마지막 페이지)
 ```
 
 자세한 요청/응답 형식은 `docs/specs/skill-service.md` 참고.

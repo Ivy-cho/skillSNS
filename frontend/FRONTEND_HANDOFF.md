@@ -1,6 +1,6 @@
 # Frontend Handoff
 
-백엔드 작업은 끝났고, 아래 두 가지는 프론트에서 아직 안 붙인 상태입니다.
+백엔드 작업은 끝났고, 아래 세 가지는 프론트에서 아직 안 붙인 상태입니다.
 
 ## 1. 스킬피드 검색 + 페이징을 서버 사이드로 전환
 
@@ -73,3 +73,24 @@ Authorization: Bearer <access_token>
   - 결과가 `null`이면: 지금처럼 웰컴 메시지만 띄우고 새 대화로 시작
 - 이후 `handleSend`의 기존 분기(`sessionIdRef.current ? continueChat : startChat`)는 그대로
   두면 됨 — 이어하기든 새 시작이든 자연스럽게 맞물림
+
+## 3. 마이페이지(`/home`) 프로필 사진·소개글이 하드코딩됨
+
+**현재 상태**: `frontend/src/app/(main)/home/page.tsx:84-93`에서 프로필 사진 자리는 항상
+고정 이모지 `🙂`, 소개글은 항상 고정 문구 `"아직 소개가 없어요"`만 보여줌 — `user.avatar_url`,
+`user.bio` 값을 아예 안 읽음. 주석에 "프로필 사진은 아직 백엔드에 필드가 없어 기본 아바타로
+둔다"라고 되어 있는데, 이건 예전(백엔드에 필드 없던 시절) 주석이 안 지워진 것 — 지금은
+`/auth/me` 응답(`UserInfo` 타입, `frontend/src/lib/authClient.ts`)에 `avatar_url`/`bio`가
+이미 들어있고, 가입 시 카카오/구글 기본 프로필 사진도 채워주도록 백엔드가 구현되어 있음.
+그래서 실제로는 사진·소개글이 있는 유저도 마이페이지에선 항상 빈 상태로 보임.
+
+**할 일**: `profile/edit/page.tsx`에 이미 같은 문제를 처리하는 패턴이 있으니(`shownAvatar`,
+82~191번 줄, `<img>` 있으면 이미지 없으면 이모지 fallback) 그대로 가져다 쓰면 됨.
+- `home/page.tsx`의 `user`(`getStoredUser()`)에서 `user?.avatar_url`을 읽어서, 있으면
+  `<img src={user.avatar_url} className="h-full w-full rounded-full object-cover" />`로,
+  없으면 지금처럼 `🙂` 이모지로 표시
+- `user?.bio`가 있으면 그 값을, 없으면 지금 문구(`"아직 소개가 없어요"`) 그대로 표시
+- 오래된 `// 프로필 사진은 아직 백엔드에 필드가 없어...` 주석 제거
+- 참고: `getStoredUser()`는 로그인 시점 캐시라, 프로필 편집 화면에서 저장하면
+  `updateStoredUser()`로 캐시가 갱신되므로 마이페이지 재방문 시 최신값이 반영됨 (이미 되어 있음,
+  추가 작업 불필요)

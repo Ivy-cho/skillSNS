@@ -17,10 +17,12 @@ user-service가 소셜 로그인을 처리해 자체 JWT를 발급하고(`/auth/
 
 ## 왜 CORS 설정이 필요한가
 
-브라우저(`localhost:3000`)가 다른 오리진(`localhost:8001`, `localhost:8002`)을 직접
-호출하는 구조라 각 서비스에 `CORSMiddleware`가 없으면 요청 자체가 브라우저에서 막힌다.
-두 서비스의 `main.py`에 로컬 개발용으로 `http://localhost:3000`만 허용해뒀다 — 배포
-시엔 실제 프론트 도메인으로 좁혀야 한다.
+브라우저(`localhost:3000`)가 다른 오리진(`localhost:8001`, `localhost:8002`,
+`localhost:8003`)을 직접 호출하는 구조라 각 서비스에 `CORSMiddleware`가 없으면 요청
+자체가 브라우저에서 막힌다. 세 서비스 모두 `CORS_ORIGINS` 환경변수로 허용 오리진을
+관리한다(`app/core/config.py`의 `cors_origins_list`) — 로컬 기본값은
+`http://localhost:3000`이고, 배포 도메인은 `render.yaml`의 `CORS_ORIGINS` 값으로
+따로 관리한다.
 
 ---
 

@@ -95,7 +95,9 @@ user-service (callback)
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|---|---|
 | code | string | ✅ | 소셜 플랫폼이 발급한 Authorization Code |
-| state | string | ✅ | CSRF 방지용 상태값 |
+
+> `state`는 받지 않는다 — CSRF 방지는 Supabase Auth의 PKCE 플로우(`exchange_code_for_session`)가
+> 대신 처리하므로 user-service가 별도로 검증할 state 값이 없다.
 
 **응답 (200 OK)**
 ```json
@@ -109,16 +111,20 @@ user-service (callback)
     "email": "user@gmail.com",
     "nickname": "홍길동",
     "provider": "google",
-    "created_at": "2026-06-25T00:00:00Z"
+    "created_at": "2026-06-25T00:00:00Z",
+    "bio": null,
+    "avatar_url": "https://lh3.googleusercontent.com/..."
   }
 }
 ```
+
+신규 가입이면 `avatar_url`은 제공자(구글/카카오)가 준 프로필 사진 URL로 자동 채워진다
+(`user_metadata.avatar_url` 또는 `picture`) — 유저가 직접 업로드하기 전까지의 기본값이다.
 
 **에러 응답**
 | 상태코드 | 에러코드 | 설명 |
 |---|---|---|
 | 400 | INVALID_CODE | 유효하지 않은 Authorization Code |
-| 400 | INVALID_STATE | state 불일치 (CSRF 의심) |
 | 500 | AUTH_SERVER_ERROR | Supabase Auth 서버 오류 |
 
 ---
@@ -154,7 +160,54 @@ user-service (callback)
 
 ---
 
-### 4-4. 로그아웃
+### 4-4. 내 정보 조회 / 프로필 수정
+
+| 항목 | 내용 |
+|---|---|
+| Method | `GET` |
+| URL | `/auth/me` |
+| 설명 | 현재 로그인한 사용자 정보를 반환한다 (4-2 콜백 응답의 `user`와 동일한 구조) |
+| 인증 | Access Token 필요 |
+
+| 항목 | 내용 |
+|---|---|
+| Method | `PATCH` |
+| URL | `/auth/me` |
+| 설명 | `nickname`/`bio`/`avatar_url` 중 요청에 포함된 필드만 수정한다 |
+| 인증 | Access Token 필요 |
+
+**Request Body** (모두 선택)
+```json
+{ "nickname": "새 닉네임", "bio": "소개글", "avatar_url": "https://..." }
+```
+
+---
+
+### 4-5. 프로필 사진 업로드
+
+| 항목 | 내용 |
+|---|---|
+| Method | `POST` |
+| URL | `/auth/me/avatar` |
+| 설명 | 업로드된 이미지를 최대 512×512로 축소하고 JPEG로 통일해 Supabase Storage(`avatars` 버킷)에 저장한다. 경로가 항상 `{user_id}.jpg`라 유저당 파일이 하나로 덮어써진다. |
+| 인증 | Access Token 필요 |
+| Content-Type | `multipart/form-data` (`file` 필드) |
+
+**응답 (200 OK)**
+```json
+{ "avatar_url": "https://.../avatars/{user_id}.jpg" }
+```
+
+**에러 응답**
+| 상태코드 | 에러코드 | 설명 |
+|---|---|---|
+| 400 | INVALID_FILE_TYPE | 지원 안 하는 형식(jpeg/png/webp/gif 외) 또는 이미지로 열리지 않음 |
+| 400 | FILE_TOO_LARGE | 원본 파일이 5MB 초과 |
+| 500 | AVATAR_UPLOAD_FAILED | Storage 업로드 실패 |
+
+---
+
+### 4-6. 로그아웃
 
 | 항목 | 내용 |
 |---|---|
@@ -203,6 +256,8 @@ Authorization: Bearer {access_token}
 | nickname | VARCHAR | 표시 이름 |
 | provider | VARCHAR | `google` / `kakao` |
 | provider_id | VARCHAR | 소셜 플랫폼 고유 ID |
+| bio | TEXT | 소개글 (nullable) |
+| avatar_url | TEXT | 프로필 사진 URL (nullable) — 가입 시 소셜 프로필 사진으로 기본값 채움, 직접 업로드 시 Storage 파일로 교체 |
 | created_at | TIMESTAMP | 가입일 |
 | updated_at | TIMESTAMP | 수정일 |
 

@@ -107,6 +107,13 @@ async def auth_callback(code: str, db: AsyncSession = Depends(get_db)):
         supabase_user.user_metadata.get("preferred_username") or
         (email.split("@")[0] if email else provider_id[:8])
     )
+    # 제공자별 프로필 사진 필드: Google=avatar_url/picture, Kakao=avatar_url.
+    # 가입 시 기본값으로만 쓰고, 우리 서버가 다운로드해서 리사이즈하진 않는다
+    # (유저가 직접 업로드하면 그때 /me/avatar가 우리 Storage 파일로 덮어씀).
+    default_avatar_url = (
+        supabase_user.user_metadata.get("avatar_url") or
+        supabase_user.user_metadata.get("picture")
+    )
 
     # provider_id로 기존 사용자 조회 (email 없어도 항상 식별 가능)
     result = await db.execute(
@@ -117,7 +124,13 @@ async def auth_callback(code: str, db: AsyncSession = Depends(get_db)):
     if not user:
         # email이 없으면 placeholder 생성 (DB NOT NULL 제약 충족용)
         stored_email = email or f"{provider_id}@{provider}.skillsns"
-        user = User(email=stored_email, nickname=nickname, provider=provider, provider_id=provider_id)
+        user = User(
+            email=stored_email,
+            nickname=nickname,
+            provider=provider,
+            provider_id=provider_id,
+            avatar_url=default_avatar_url,
+        )
         db.add(user)
         await db.flush()
     elif email and user.email != email and not user.email.endswith(".skillsns"):

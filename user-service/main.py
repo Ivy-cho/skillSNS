@@ -55,11 +55,3 @@ app.include_router(auth_router)
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "user-service"}
-
-
-# ==============================================================
-# 테스트 프론트엔드 (삭제 예정)
-# 삭제 방법: 아래 두 줄 + test_frontend/ 폴더 삭제
-# ==============================================================
-from fastapi.staticfiles import StaticFiles  # noqa: E402
-app.mount("/", StaticFiles(directory="test_frontend", html=True), name="test_frontend")

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { getCurrentUserId, getStoredUser, logout } from "@/lib/authClient";
 import { deleteSkill, listSkills, type PublishedSkill } from "@/lib/backendClient";
-import { CATEGORIES } from "@/components/skill-creator/types";
+import { categoryMeta } from "@/components/skill-creator/types";
 import { ScrapTab } from "@/components/home/ScrapTab";
 import { CreateSkillSheet } from "@/components/home/CreateSkillSheet";
 import { SwipeableRow } from "@/components/common/SwipeableRow";
@@ -17,7 +17,7 @@ import {
 } from "@/lib/scrapStore";
 
 function emojiFor(category: string) {
-  return CATEGORIES.find((c) => c.label === category)?.emoji ?? "🍅";
+  return categoryMeta(category, "🍅").emoji;
 }
 
 function formatDate(iso: string) {

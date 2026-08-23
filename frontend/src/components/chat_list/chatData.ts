@@ -3,11 +3,11 @@
 // ChatListItem이 비어있으면 알아서 숨긴다(마지막 메시지만 보여준다).
 
 import { listChatSessions } from "@/lib/backendClient";
-import { CATEGORIES } from "../skill-creator/types";
+import { categoryMeta } from "../skill-creator/types";
 import type { Conversation } from "./types";
 
 function emojiForCategory(category: string): string {
-  return CATEGORIES.find((c) => c.label === category)?.emoji ?? "💬";
+  return categoryMeta(category, "💬").emoji;
 }
 
 // ISO 시각 → "방금"/"3시간 전"/"어제"/"3일 전"/"1주 전" 같은 상대 표기.

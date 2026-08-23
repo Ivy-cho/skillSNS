@@ -20,15 +20,18 @@ const EMOJI_CHOICES = [
 
 export function CustomCategoryModal({
   open,
+  initial,
   onClose,
   onCreate,
 }: {
   open: boolean;
+  /** 이미 만들어 둔 카테고리를 고치는 경우 그 값. 호출부에서 key를 바꿔 다시 마운트한다. */
+  initial?: Category | null;
   onClose: () => void;
   onCreate: (category: Category) => void;
 }) {
-  const [emoji, setEmoji] = useState(EMOJI_CHOICES[0]);
-  const [label, setLabel] = useState("");
+  const [emoji, setEmoji] = useState(initial?.emoji ?? EMOJI_CHOICES[0]);
+  const [label, setLabel] = useState(initial?.label ?? "");
 
   if (!open) return null;
 
@@ -37,8 +40,6 @@ export function CustomCategoryModal({
   function handleCreate() {
     if (!trimmed) return;
     onCreate({ id: "custom", label: trimmed, emoji });
-    setLabel("");
-    setEmoji(EMOJI_CHOICES[0]);
   }
 
   return (
@@ -50,7 +51,9 @@ export function CustomCategoryModal({
         className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-md"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-[0.95rem] font-bold">직접 카테고리 만들기</h2>
+        <h2 className="text-[0.95rem] font-bold">
+          {initial ? "카테고리 고치기" : "직접 카테고리 만들기"}
+        </h2>
         <p className="mt-1 text-[0.82rem] text-muted">
           만들고 싶은 카테고리 이름과 이모지를 골라주세요.
         </p>
@@ -106,7 +109,7 @@ export function CustomCategoryModal({
             disabled={!trimmed}
             className="flex-1 rounded-full bg-primary px-3.5 py-2 text-[0.82rem] font-semibold text-on-primary disabled:opacity-40"
           >
-            만들기
+            {initial ? "저장" : "만들기"}
           </button>
         </div>
       </div>

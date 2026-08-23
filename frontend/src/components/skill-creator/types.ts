@@ -13,6 +13,32 @@ export const CATEGORIES: Category[] = [
   { id: "custom", label: "기타", emoji: "✏️" },
 ];
 
+// 직접 만든 카테고리는 백엔드에 "🎨 사진 보정"처럼 **이모지 + 공백 + 이름**으로 저장한다.
+// skills.category가 자유 문자열이라 이렇게 두면 사용자가 고른 아이콘이 백엔드 변경 없이
+// 앱 전체(홈·피드·채팅목록·대화 화면)에서 그대로 따라다닌다.
+const LEADING_EMOJI = /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s+(.+)$/u;
+
+export function toStoredCategory(category: Category): string {
+  const preset = CATEGORIES.find((c) => c.label === category.label && c.id !== "custom");
+  return preset ? preset.label : `${category.emoji} ${category.label}`;
+}
+
+// 저장된 카테고리 문자열을 화면에 쓸 이모지·이름으로 되돌린다.
+// 기본 카테고리("재테크")면 그 이모지를, 직접 만든 것("🎨 사진 보정")이면 앞의 이모지를 쓴다.
+export function categoryMeta(
+  category: string | null | undefined,
+  fallbackEmoji: string
+): { emoji: string; label: string } {
+  const value = (category ?? "").trim();
+  const preset = CATEGORIES.find((c) => c.label === value);
+  if (preset) return { emoji: preset.emoji, label: preset.label };
+
+  const custom = value.match(LEADING_EMOJI);
+  if (custom) return { emoji: custom[1], label: custom[2] };
+
+  return { emoji: fallbackEmoji, label: value };
+}
+
 export type ChatMessage = {
   id: string;
   role: "agent" | "user";

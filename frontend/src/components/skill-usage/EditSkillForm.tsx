@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { BackButton } from "@/components/nav/BackButton";
 import { getSkill, updateSkill } from "@/lib/backendClient";
-import { CATEGORIES } from "@/components/skill-creator/types";
+import { categoryMeta } from "@/components/skill-creator/types";
 
 const TITLE_MAX = 40;
 
@@ -63,7 +63,7 @@ export function EditSkillForm({ skillId }: { skillId: string }) {
     }
   }
 
-  const categoryMeta = CATEGORIES.find((c) => c.label === category);
+  const shownCategory = categoryMeta(category, "🏷️");
 
   return (
     <AuthGate>
@@ -128,7 +128,7 @@ export function EditSkillForm({ skillId }: { skillId: string }) {
                 <span className="text-[0.8rem] font-semibold text-ink">카테고리</span>
                 <div className="mt-1.5 flex items-center gap-2">
                   <span className="rounded-full border border-border bg-surface-2 px-3 py-1.5 text-[0.8rem] text-muted">
-                    {categoryMeta ? `${categoryMeta.emoji} ${categoryMeta.label}` : category}
+                    {`${shownCategory.emoji} ${shownCategory.label}`}
                   </span>
                   <span className="text-[0.7rem] text-muted">아직 바꿀 수 없어요</span>
                 </div>

@@ -32,45 +32,6 @@
 
 ---
 
-## 🔴 카카오 로그인만 실패합니다 (구글은 정상) — 설정 확인 요청
-
-**증상**: 로그인 화면에서 카카오를 누르면 카카오 로그인 화면까지는 뜨는데, 그 뒤로 우리 앱에
-돌아오지 못합니다. **구글은 같은 경로로 정상 동작**합니다(실제 로그인 성공, 그 계정으로
-스킬 생성·프로필 수정까지 확인).
-
-**확인한 사실 — 프론트/CORS/콜백 배선 문제는 아닙니다.**
-user-service 로그를 보면 카카오는 **콜백이 아예 호출되지 않습니다**:
-```
-GET /auth/login/kakao    200 OK      ← 로그인 URL 발급은 됨
-GET /auth/login/google   200 OK
-GET /auth/callback?code= 200 OK      ← 구글만 돌아옴
-```
-즉 실패 지점이 **카카오 개발자센터 또는 Supabase 쪽 설정**입니다.
-
-**브라우저에서 확인한 실제 카카오 요청 값**
-```
-client_id     = c9f747a17663cf56959a0eb2a484ae8e
-scope         = account_email profile_image profile_nickname
-redirect_uri  = https://twumveupobzimkkiqlim.supabase.co/auth/v1/callback
-```
-
-**확인 부탁드릴 곳** (카카오 개발자센터 → 내 애플리케이션)
-1. **동의항목** — Supabase가 `account_email`을 요구합니다. 카카오는 이메일 수집에 동의항목
-   활성화(경우에 따라 비즈 앱 등록)가 필요합니다. [카카오 로그인 → 동의항목]의
-   **카카오계정(이메일)** 상태 확인. ← 가장 의심되는 지점
-2. **Redirect URI** — [카카오 로그인 → Redirect URI]에 위 `redirect_uri`
-   (`https://…supabase.co/auth/v1/callback`)가 등록돼 있는지.
-3. **카카오 로그인 활성화** 스위치 ON 여부.
-4. Supabase 대시보드 → Authentication → Providers → Kakao의 client id/secret.
-
-카카오 화면에 뜨는 **에러 코드(KOE___)** 를 알려주시면 원인을 더 좁힐 수 있습니다
-(KOE006=Redirect URI 미등록 / 동의항목 관련 / KOE101·KOE004=앱 설정).
-
-**프론트는 별도 작업이 없습니다** — 설정이 맞춰지면 구글과 동일한 경로로 동작합니다.
-(카카오가 계속 막히면 로그인 화면에서 카카오 버튼을 잠시 감추는 것도 방법입니다 — 원하시면 말씀해 주세요.)
-
----
-
 ## 🟢 스킬 만들기 파이프라인 — 남은 것
 
 ### (1) 이전 단계로 되돌리기 (revert)
@@ -145,7 +106,7 @@ stage로 되돌림 → 그 stage의 **시작 상태**(안내/질문 메시지 �
 
 이미 구현돼 동작하는 것들입니다. 무엇을 어떻게 해결했는지 기록으로 남겨 둡니다.
 
-## ✅ 1. 소셜 로그인 — 설정 2가지 (완료, 2026-08-17 · 단 카카오는 위 항목 참고)
+## ✅ 1. 소셜 로그인 — 설정 2가지 (완료, 2026-08-17 · 카카오는 아래 8번 참고)
 
 **이게 막혀서 앱에 정상 진입이 안 됩니다.** user-service의 기존 계약
 (`/auth/login/{provider}` → `login_url`, `/auth/callback?code=` → `TokenResponse`)은
@@ -382,3 +343,59 @@ Ivy가 백엔드를 만들고 프론트가 붙였습니다. 요청했던 "피드
   복원할 때 맨 앞에 다시 붙입니다(안 붙이면 대화가 중간부터 시작한 것처럼 보입니다).
 
 ---
+
+## ✅ 8. 카카오 로그인 (완료, 2026-08-23)
+
+**해결됨** — Ivy가 저장소 밖(카카오 개발자센터 / Supabase 대시보드) 설정에서 고쳤다고
+전달받았습니다. 코드 커밋은 없습니다(원인이 설정이었으니 예상과 맞습니다).
+
+프론트에서 확인한 것: `GET /auth/login/kakao`가 200으로 `provider=kakao`,
+`redirect_to=http://localhost:3000/auth/callback`인 로그인 URL을 정상 발급합니다.
+다만 **끝까지(카카오 화면 → 콜백 → /home) 실제로 로그인해 본 검증은 아직입니다** —
+전체 흐름은 실제 계정으로 한 번 눌러봐야 확실합니다. 아래는 당시 조사 기록입니다.
+
+<details>
+<summary>당시 증상과 조사 내용 (참고용)</summary>
+
+
+**증상**: 로그인 화면에서 카카오를 누르면 카카오 로그인 화면까지는 뜨는데, 그 뒤로 우리 앱에
+돌아오지 못합니다. **구글은 같은 경로로 정상 동작**합니다(실제 로그인 성공, 그 계정으로
+스킬 생성·프로필 수정까지 확인).
+
+**확인한 사실 — 프론트/CORS/콜백 배선 문제는 아닙니다.**
+user-service 로그를 보면 카카오는 **콜백이 아예 호출되지 않습니다**:
+```
+GET /auth/login/kakao    200 OK      ← 로그인 URL 발급은 됨
+GET /auth/login/google   200 OK
+GET /auth/callback?code= 200 OK      ← 구글만 돌아옴
+```
+즉 실패 지점이 **카카오 개발자센터 또는 Supabase 쪽 설정**입니다.
+
+**브라우저에서 확인한 실제 카카오 요청 값**
+```
+client_id     = c9f747a17663cf56959a0eb2a484ae8e
+scope         = account_email profile_image profile_nickname
+redirect_uri  = https://twumveupobzimkkiqlim.supabase.co/auth/v1/callback
+```
+
+**확인 부탁드릴 곳** (카카오 개발자센터 → 내 애플리케이션)
+1. **동의항목** — Supabase가 `account_email`을 요구합니다. 카카오는 이메일 수집에 동의항목
+   활성화(경우에 따라 비즈 앱 등록)가 필요합니다. [카카오 로그인 → 동의항목]의
+   **카카오계정(이메일)** 상태 확인. ← 가장 의심되는 지점
+2. **Redirect URI** — [카카오 로그인 → Redirect URI]에 위 `redirect_uri`
+   (`https://…supabase.co/auth/v1/callback`)가 등록돼 있는지.
+3. **카카오 로그인 활성화** 스위치 ON 여부.
+4. Supabase 대시보드 → Authentication → Providers → Kakao의 client id/secret.
+
+카카오 화면에 뜨는 **에러 코드(KOE___)** 를 알려주시면 원인을 더 좁힐 수 있습니다
+(KOE006=Redirect URI 미등록 / 동의항목 관련 / KOE101·KOE004=앱 설정).
+
+**프론트는 별도 작업이 없습니다** — 설정이 맞춰지면 구글과 동일한 경로로 동작합니다.
+(카카오가 계속 막히면 로그인 화면에서 카카오 버튼을 잠시 감추는 것도 방법입니다 — 원하시면 말씀해 주세요.)
+
+---
+
+</details>
+
+---
+

@@ -187,6 +187,25 @@ export function createSkillDirect(body: {
   return postJSON<PublishedSkill>("/skills", body);
 }
 
+export type ChatHistory = {
+  session_id: string;
+  skill_id: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+};
+
+// 이 스킬과 나눈 가장 최근 대화 (채팅창 진입 시 이어보기용).
+// 이력이 없으면 본문이 null로 200이 온다 — 그때는 새 대화로 시작하면 된다.
+export async function getLatestChatSession(skillId: string): Promise<ChatHistory | null> {
+  const res = await fetch(`${BACKEND_URL}/chat/${skillId}/latest`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) {
+    // 로그인 전이거나 조회에 실패해도 대화 자체는 시작할 수 있어야 하니 새 대화로 본다.
+    return null;
+  }
+  return res.json();
+}
+
 export function startChat(skillId: string, message: string) {
   return postJSON<ChatResponse>(`/chat/${skillId}`, { message });
 }

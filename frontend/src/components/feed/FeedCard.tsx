@@ -12,8 +12,15 @@ export function FeedCard({ card }: { card: FeedCardData }) {
       className="block shrink-0 overflow-hidden rounded-[14px] border border-border bg-surface transition active:scale-[0.99]"
     >
       <div className="flex items-center gap-2.5 p-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-[0.7rem] font-semibold text-on-primary">
-          {card.author.avatar}
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-[0.7rem] font-semibold text-on-primary">
+          {card.author.avatarUrl ? (
+            // 아바타는 Supabase 스토리지의 임의 호스트에서 온다. next/image의 remotePatterns에
+            // 환경마다 다른 호스트를 박아두는 대신 그냥 <img>로 띄운다. (home/page.tsx와 동일)
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={card.author.avatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            card.author.avatar
+          )}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="flex items-center gap-1">

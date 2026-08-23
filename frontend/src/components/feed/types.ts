@@ -2,12 +2,14 @@
 
 export type FeedAuthor = {
   name: string;
-  avatar: string; // 원형 아바타에 넣을 짧은 라벨 (이름 축약 또는 이모지)
+  avatar: string; // 사진이 없을 때 원형 아바타에 넣을 짧은 라벨 (이름 축약)
+  avatarUrl: string | null; // 등록한 프로필 사진. 없으면 avatar 라벨로 대체한다
 };
 
 export type FeedCard = {
   id: string;
   categoryId: string; // skill-creator CATEGORIES의 id와 매칭 (필터용)
+  emoji: string; // 카테고리 아이콘. 직접 만든 카테고리면 사용자가 고른 이모지
   title: string;
   author: FeedAuthor;
   comment: string; // 스킬 주인 "한마디"

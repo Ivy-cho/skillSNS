@@ -151,7 +151,7 @@ export function ScrapTab() {
             key={folder.id}
             actions={[
               {
-                label: "이름",
+                label: "편집",
                 onClick: () => {
                   setRenamingId(folder.id);
                   setRenameValue(folder.name);

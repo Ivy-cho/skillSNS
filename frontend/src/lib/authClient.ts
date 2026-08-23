@@ -34,11 +34,22 @@ export type TokenResponse = {
 
 class AuthError extends Error {}
 
+// user-service가 detail로 내려주는 코드성 문자열은 화면에 그대로 보여주면 안 된다.
+// (backendClient의 friendlyDetail과 같은 방식)
+const DETAIL_MESSAGES: Record<string, string> = {
+  INVALID_FILE_TYPE: "JPG · PNG · WEBP · GIF 파일만 올릴 수 있어요.",
+  FILE_TOO_LARGE: "사진이 너무 커요. 5MB 이하로 올려주세요.",
+  AVATAR_UPLOAD_FAILED: "사진을 올리지 못했어요. 잠시 후 다시 시도해주세요.",
+};
+
 async function getJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${USER_SERVICE_URL}${path}`, init);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new AuthError(body.detail ?? `요청이 실패했어요 (${res.status})`);
+    const detail = typeof body.detail === "string" ? body.detail : null;
+    throw new AuthError(
+      (detail && DETAIL_MESSAGES[detail]) ?? detail ?? `요청이 실패했어요 (${res.status})`,
+    );
   }
   return res.json();
 }

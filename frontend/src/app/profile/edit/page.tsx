@@ -13,6 +13,14 @@ import {
 } from "@/lib/authClient";
 import { clearAnthropicKey, hasAnthropicKey, saveAnthropicKey } from "@/lib/anthropicKey";
 
+// user-service의 /auth/me/avatar가 받는 조건과 맞춰둔다 (auth.py의
+// AVATAR_ALLOWED_CONTENT_TYPES / MAX_AVATAR_SIZE / AVATAR_MAX_DIMENSION).
+// 아이폰 기본 포맷인 HEIC는 서버도 브라우저도 못 읽어서 여기서 미리 걸러야 한다 —
+// 안 그러면 미리보기가 깨진 이미지로 뜨고, 저장 때 400이 나며 소개글까지 함께 실패한다.
+const AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+const AVATAR_MAX_DIMENSION = 512;
+
 const NICKNAME_MAX = 20;
 const BIO_MAX = 80;
 
@@ -82,7 +90,41 @@ export default function ProfileEditPage() {
 
   function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) setPickedFile(file);
+    // 같은 파일을 다시 고를 수 있도록 input 값을 비운다.
+    e.target.value = "";
+    if (!file) return;
+
+    if (!AVATAR_TYPES.includes(file.type)) {
+      setPickedFile(null);
+      setError(
+        file.type === "image/heic" || file.type === "image/heif" || /\.hei[cf]$/i.test(file.name)
+          ? "아이폰 사진(HEIC)은 아직 올릴 수 없어요. 사진 앱에서 JPEG로 내보낸 뒤 올려주세요."
+          : "JPG · PNG · WEBP · GIF 파일만 올릴 수 있어요.",
+      );
+      return;
+    }
+    setError(null);
+    setPickedFile(file);
+  }
+
+  // 서버가 어차피 512px JPEG로 다시 굽는다. 큰 사진은 여기서 미리 줄여서 보내야
+  // 5MB 제한(FILE_TOO_LARGE)에 걸리지 않는다 — 요즘 폰 사진은 쉽게 넘는다.
+  async function shrinkIfNeeded(file: File): Promise<File> {
+    if (file.size <= AVATAR_MAX_BYTES) return file;
+
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, AVATAR_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.9),
+    );
+    if (!blob) return file; // 못 줄였으면 원본을 보내고 서버 판단에 맡긴다
+    return new File([blob], "avatar.jpg", { type: "image/jpeg" });
   }
 
   async function handleSave() {
@@ -110,7 +152,7 @@ export default function ProfileEditPage() {
       }
 
       let uploadedUrl: string | undefined;
-      if (pickedFile) uploadedUrl = await uploadAvatar(token, pickedFile);
+      if (pickedFile) uploadedUrl = await uploadAvatar(token, await shrinkIfNeeded(pickedFile));
 
       const updated = await updateProfile(token, {
         nickname: nickname.trim(),
@@ -196,7 +238,7 @@ export default function ProfileEditPage() {
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept={AVATAR_TYPES.join(",")}
               onChange={handlePick}
               className="hidden"
             />

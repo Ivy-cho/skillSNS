@@ -116,8 +116,9 @@
 | ORM | SQLAlchemy | psycopg2 드라이버 |
 | 인증 | Supabase Auth + JWT | 소셜 로그인 (Google / Kakao) |
 | 컨테이너 | Docker + docker-compose | 로컬 개발용 |
-| 배포 | Render | GitHub 연동 자동 배포 |
-| LLM | 미정 (유료) | Agent/Prompt 오케스트레이션용 |
+| 배포 | Render (백엔드 3개 + 프론트) | GitHub Actions → Deploy Hook 자동 배포 |
+| CI/CD | GitHub Actions | lint 통과 시에만 Render Deploy Hook 호출 (develop 브랜치) |
+| LLM | Anthropic Claude, BYOK | 사용자 본인 API 키를 Fernet으로 암호화해 서버에 저장 (아래 8절) |
 
 ---
 
@@ -149,3 +150,23 @@
 
 #### 채택 이유 (Anthropic Agent Skills API를 안 쓴 이유는 여전히 유효)
 - 실제 skill-creator의 신뢰성은 특별한 모델/기술이 아니라 "테스트를 먼저 돌려보고 객관적 기준으로 채점한 뒤 고친다"는 절차에서 나온다는 판단은 그대로 유지된다. 다만 그 절차를 사용자에게 숨긴 내부 처리로 둘지, 아니면 사용자가 직접 보고 판단하는 단계(현재의 skill-test/skill-improve)로 노출할지가 바뀌었다.
+
+---
+
+## 8. LLM 비용 — BYOK(Bring Your Own Key)
+
+### 결정: 서버가 공용 API 키를 들고 있지 않고, 유저마다 본인 Anthropic 키를 등록해서 쓴다
+
+#### 배경
+토이 프로젝트를 여러 명이 같이 써보는 상황에서, 서버 공용 키 하나로 LLM 비용을 다 감당하면
+누가 얼마나 썼는지 통제가 안 되고 비용이 특정 한 명에게 쏠린다. "대화하는 사람이 자기
+키로 비용을 낸다"는 원칙으로, 사용자별로 각자의 키를 등록해서 쓰게 했다.
+
+#### 구현
+- `skill-service`의 `user_secrets` 테이블에 `anthropic_api_key_encrypted` 컬럼 하나
+- 저장 시 `cryptography`(Fernet) 대칭키로 암호화, 서버 환경변수 `SECRET_ENCRYPTION_KEY`로
+  복호화 — 평문은 DB에도 로그에도 남지 않는다
+- 계정(user_id) 단위로 저장되어 어느 기기·브라우저에서 로그인해도 다시 입력할 필요가 없다
+- 채팅(`/chat/*`)·스킬 생성(`/skills/create/*`) 모두 호출 직전에 로그인 유저 본인 키를
+  조회해서 씀. 키가 없으면 LLM을 호출하지 않고 등록 안내 메시지/에러를 즉시 반환한다 —
+  서버 공용 키로 조용히 폴백하지 않는다.

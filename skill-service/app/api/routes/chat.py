@@ -160,6 +160,44 @@ async def list_chat_sessions(
     return summaries
 
 
+@router.get("/{skill_id}/latest", response_model=Optional[ChatHistoryResponse])
+async def get_latest_chat_session(
+    skill_id: str,
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    """이 스킬에서 나눈 가장 최근 대화 — 채팅창 진입 시 이어보기용.
+    대화 이력이 없으면 새 대화를 시작할 수 있도록 null을 돌려준다."""
+    user_id = _get_user_id(credentials)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="UNAUTHORIZED")
+
+    session_result = await db.execute(
+        select(ChatSession)
+        .where(ChatSession.skill_id == skill_id, ChatSession.user_id == user_id)
+        .order_by(ChatSession.updated_at.desc())
+        .limit(1)
+    )
+    session = session_result.scalar_one_or_none()
+    if not session:
+        return None
+
+    agent = build_agent("", request.app.state.checkpointer)
+    config = {"configurable": {"thread_id": session.thread_id}}
+    state = await agent.aget_state(config)
+
+    messages = []
+    if state and state.values.get("messages"):
+        for msg in state.values["messages"]:
+            if isinstance(msg, HumanMessage):
+                messages.append(MessageItem(role="user", content=msg.content))
+            elif isinstance(msg, AIMessage):
+                messages.append(MessageItem(role="assistant", content=msg.content))
+
+    return ChatHistoryResponse(session_id=session.id, skill_id=skill_id, messages=messages)
+
+
 @router.get("/{skill_id}/{session_id}", response_model=ChatHistoryResponse)
 async def get_chat_history(
     skill_id: str,

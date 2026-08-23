@@ -38,7 +38,10 @@
 | 스킬 수정 | ✅ (본인만) | ✅ 구현 완료 |
 | 스킬 삭제 | ✅ (본인만) | ✅ 구현 완료 |
 | 에이전트 대화 | ✅ (비로그인 시 안내 메시지) | ✅ 구현 완료 |
-| 대화 기록 조회 | ✅ | ✅ 구현 완료 |
+| 대화 기록 조회 / 이전 대화 이어보기 | ✅ | ✅ 구현 완료 (`GET /chat/{skill_id}/{session_id}`, `GET /chat/{skill_id}/latest`) |
+| 채팅 목록 (내가 대화해본 스킬들) | ✅ | ✅ 구현 완료 (`GET /chat/sessions`) |
+| BYOK(사용자 본인 Anthropic 키) | ✅ | ✅ 구현 완료 (`/me/anthropic-key`, Fernet 암호화 저장) — 키 없으면 LLM 미호출, 안내 메시지 반환 |
+| 스크랩 (폴더별 저장) | ✅ | ✅ 구현 완료 (`/scrap/*`) |
 | AI 스킬 생성(5단계 인터뷰 파이프라인) | ✅ | ✅ 구현 완료 (`/skills/create/*`, 아래 4-1절 참고) |
 
 ---
@@ -437,6 +440,35 @@ Authorization: Bearer {access_token}
 
 ---
 
+### 6-9-1. 이전 대화 이어보기 / 채팅 목록
+
+| 항목 | 내용 |
+|---|---|
+| Method | `GET` |
+| URL | `/chat/{skill_id}/latest` |
+| 설명 | 이 스킬에서 로그인 유저가 나눈 가장 최근 세션을 6-9와 동일한 형식으로 반환한다. 없으면 본문이 `null`(200 OK) — 클라이언트가 새 대화 시작 신호로 쓴다. |
+| 인증 | Access Token 필요 |
+
+| 항목 | 내용 |
+|---|---|
+| Method | `GET` |
+| URL | `/chat/sessions` |
+| 설명 | 로그인 유저가 대화해본 스킬 목록을 최근 대화순으로 반환한다(채팅 목록 화면용). 각 항목에 스킬 제목/카테고리/마지막 메시지/마지막 대화 시각이 포함된다. |
+| 인증 | Access Token 필요 |
+
+---
+
+### 6-9-2. 스크랩 / BYOK(사용자 Anthropic 키)
+
+스크랩(`/scrap/*`)과 BYOK(`/me/anthropic-key`) 엔드포인트 전체 목록·요청/응답 형식은
+`README.md` 8.3절 "주요 API"에 정리돼 있다 — 둘 다 CRUD가 단순해 여기선 중복하지 않는다.
+BYOK 요점만: 채팅(`/chat/*`)·스킬 생성(`/skills/create/*`)이 LLM을 호출하기 직전, 로그인
+유저 본인이 등록한 Anthropic 키를 `user_secrets` 테이블에서 복호화해 사용한다. 키가
+없으면 LLM을 호출하지 않고 안내 메시지(또는 `ANTHROPIC_KEY_REQUIRED` 400)를 반환한다 —
+서버 공용 키로 조용히 대체하지 않는다("대화하는 사람이 자기 키로 낸다"는 원칙).
+
+---
+
 ### 6-10. 스킬 생성 시작
 
 | 항목 | 내용 |
@@ -608,17 +640,18 @@ message/links/files가 전부 비어있으면 422. 응답 형식은 6-10과 동�
 
 ---
 
-## 9. 아직 구현되지 않은 범위 (2026-07-18 기준)
+## 9. 아직 구현되지 않은 범위 (2026-08-21 기준)
 
-- **스킬 공개 검색/발견(discovery)**: 지금은 `GET /skills`로 전체 목록을 가져오거나 `user_id`로 필터링하는 것만 가능하고, 태그/키워드 검색, 추천, 팔로우 기반 피드는 없다. 이 기능은 skill-service 범위가 아니라 아직 미구현 상태인 **feed-service**에서 다룰 예정.
-- **실제(프로덕션) 로그인 연동**: `frontend/`가 `/skills/create/*`를 직접 호출하는 로컬 연동은 CORS 포함해 라이브로 검증됐지만(`docs/frontend-integration.md` 참고), 이건 임시 개발용 토큰으로 우회한 것이고 user-service의 실제 로그인 흐름과는 아직 연결되지 않았다.
-- ~~`skill_test`/`skill_improve` 루프, 확정(confirm)~~: `what_skill → skill_content → skill_name → skill_test`(실제 이중 실행 채점) → `skill_improve`(재인터뷰) → `retest`(재이중실행) → `/confirm`까지 전체 파이프라인이 실제 서버로 라이브 검증 완료(2026-07-19). 검증 중 `retest`가 누적 대화 히스토리 때문에 실제로 재테스트를 실행하지 않고 대화만 마무리해버리는 버그를 발견해 수정함(`retest_draft`가 human_message로 재테스트 시작을 명시적으로 안내하도록 변경).
-- **feed-service 자체**: `docker-compose.yml`에 서비스로 등록돼 있지 않고 `Dockerfile`만 존재, 코드 미구현.
-
----
-
-## 10. 테스트 프론트엔드 (`test_frontend/`)
-
-각 서비스(`user-service`, `skill-service`)가 FastAPI `StaticFiles`로 루트(`/`)에 정적 HTML 하나를 서빙해 수동 기능 테스트를 지원한다 (배포 전 삭제 예정, `main.py`에 삭제 방법 주석 있음).
-
-`skill-service/test_frontend/index.html`에서 스킬 직접 등록(`POST /skills`), 목록/상세/수정/삭제, 스킬 에이전트와의 대화(`POST /chat/*`)를 테스트할 수 있다. ("AI로 스킬 만들기" 카드는 옛 `/skills/draft` 설계 전용이라 그 설계와 함께 제거됨 — 새 5단계 파이프라인(`/skills/create/*`)은 아직 이 페이지에 없고 `/docs`의 Swagger로 테스트한다.)
+- **다른 provider 계정 통합**: 구글/카카오를 이메일 기준으로 같은 사람으로 합쳐주는 계정
+  연동(account linking)이 없다. `(provider, provider_id)`로만 식별해서, 같은 사람이어도
+  로그인 수단이 다르면 완전히 별개 계정(스킬/스크랩도 안 섞임)이다 — 현재는 의도적으로
+  보류한 상태 (`docs/specs/user-service-login.md` 7절 참고).
+- **프론트의 피드 검색·페이징 서버 연동**: `GET /feed`가 `q`/`limit`/`offset`을 지원하도록
+  백엔드는 끝났지만, 프론트(`SkillFeed.tsx`)는 아직 전체 로드 후 클라이언트 필터링 방식
+  그대로다. `frontend/FRONTEND_HANDOFF.md` 1번 항목.
+- **마이페이지 프로필 사진/소개글 표시**: 백엔드엔 `avatar_url`/`bio`가 있지만
+  `frontend/src/app/(main)/home/page.tsx`가 고정 이모지·고정 문구만 보여주고 실제 값을
+  안 읽는다. `frontend/FRONTEND_HANDOFF.md` 3번 항목.
+- **프론트의 채팅 이어보기 연동**: `GET /chat/{skill_id}/latest`는 준비됐지만
+  `SkillUsageChat.tsx`가 아직 호출 안 해서, 화면상으론 매번 새 대화로 보인다.
+  `frontend/FRONTEND_HANDOFF.md` 2번 항목.

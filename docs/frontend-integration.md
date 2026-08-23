@@ -2,7 +2,7 @@
 
 `frontend/`(Next.js)가 user-service로 실제 소셜 로그인을 하고, skill-service의
 `/skills/create/*`를 직접 호출해서 스킬 만들기 파이프라인(카테고리 선택 → 확정)을
-브라우저로 테스트할 수 있다. README의 "6. 프론트엔드 연동 테스트"는 실행 명령어만 담고
+브라우저로 테스트할 수 있다. README의 "9. 프론트엔드 연동 테스트"는 실행 명령어만 담고
 있고, 이 문서엔 그 배경과 상세 절차, 문제 해결을 정리했다.
 
 ---
@@ -17,10 +17,12 @@ user-service가 소셜 로그인을 처리해 자체 JWT를 발급하고(`/auth/
 
 ## 왜 CORS 설정이 필요한가
 
-브라우저(`localhost:3000`)가 다른 오리진(`localhost:8001`, `localhost:8002`)을 직접
-호출하는 구조라 각 서비스에 `CORSMiddleware`가 없으면 요청 자체가 브라우저에서 막힌다.
-두 서비스의 `main.py`에 로컬 개발용으로 `http://localhost:3000`만 허용해뒀다 — 배포
-시엔 실제 프론트 도메인으로 좁혀야 한다.
+브라우저(`localhost:3000`)가 다른 오리진(`localhost:8001`, `localhost:8002`,
+`localhost:8003`)을 직접 호출하는 구조라 각 서비스에 `CORSMiddleware`가 없으면 요청
+자체가 브라우저에서 막힌다. 세 서비스 모두 `CORS_ORIGINS` 환경변수로 허용 오리진을
+관리한다(`app/core/config.py`의 `cors_origins_list`) — 로컬 기본값은
+`http://localhost:3000`이고, 배포 도메인은 `render.yaml`의 `CORS_ORIGINS` 값으로
+따로 관리한다.
 
 ---
 
@@ -56,7 +58,7 @@ node --version
 
 ### 3. user-service, skill-service 실행
 
-`.env` 파일은 README 2번 "프로젝트 설정"과 동일하게 준비돼 있어야 한다(Supabase
+`.env` 파일은 README 5번 "프로젝트 설정"과 동일하게 준비돼 있어야 한다(Supabase
 `DATABASE_URL`, `JWT_SECRET_KEY`, `ANTHROPIC_API_KEY` 등). 로그인까지 테스트하려면
 user-service도 함께 띄워야 한다.
 

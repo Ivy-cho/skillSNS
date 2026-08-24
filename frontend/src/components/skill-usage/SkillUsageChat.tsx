@@ -38,8 +38,10 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
     setMessages((prev) => [...prev, { id: nextId(), role, kind: "text", content }]);
   }
 
-  // 스킬 정보와 "지난 대화"를 함께 불러온다. 둘을 같이 기다려야 인사말이 떴다가
-  // 지난 대화로 교체되는 깜빡임이 없다.
+  // 스킬 정보와 "지난 대화"를 함께 불러온다.
+  // 프론트가 만드는 고정 인사말은 두지 않는다 — 어떤 스킬이든 똑같은 문구라 의미가 없고,
+  // 서버 이력에도 없어서 이어보기 때 따로 끼워 넣어야 했다. 첫 화면은 비워두고
+  // 사용자가 말을 걸면 그때부터 스킬이 답한다.
   useEffect(() => {
     let cancelled = false;
     Promise.all([getSkill(skillId), getLatestChatSession(skillId)])
@@ -47,31 +49,17 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
         if (cancelled) return;
         setSkill(detail);
 
-        // 인사말은 프론트가 만드는 메시지라 서버 이력에 없다. 이어보기일 때도 맨 앞에
-        // 다시 붙여야 처음 들어왔을 때와 같은 화면이 된다 — 안 붙이면 대화가 중간부터
-        // 시작한 것처럼 보인다.
-        const greeting: ChatMessage = {
-          id: nextId(),
-          role: "agent",
-          kind: "text",
-          content: `안녕하세요! 저는 "${detail.title}" 스킬이에요. 무엇을 도와드릴까요?`,
-        };
-
         if (history && history.messages.length > 0) {
           sessionIdRef.current = history.session_id;
-          setMessages([
-            greeting,
-            ...history.messages.map((m) => ({
+          setMessages(
+            history.messages.map((m) => ({
               id: nextId(),
               role: m.role === "user" ? ("user" as const) : ("agent" as const),
               kind: "text" as const,
               content: m.content,
-            })),
-          ]);
-          return;
+            }))
+          );
         }
-
-        setMessages([greeting]);
       })
       .catch((e) => {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : "스킬을 불러오지 못했어요");

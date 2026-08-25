@@ -5,8 +5,9 @@
 만들어 공유하고, 다른 사람이 만든 스킬과 대화하며 그 기술을 실제로 이용할 수 있다.
 
 - 상태: 🚧 개발 진행중 — 핵심 기능(로그인, 스킬 생성 파이프라인, 대화, 피드, 스크랩,
-  채팅 목록, BYOK)은 실 DB와 붙어 Render에 배포되어 동작한다. 백엔드는 사실상 마무리
-  단계고, 프론트에 아직 안 붙인 항목은 [`frontend/FRONTEND_HANDOFF.md`](frontend/FRONTEND_HANDOFF.md)에 정리 중.
+  채팅 목록, BYOK)은 실 DB와 붙어 Render에 배포되어 동작하고, 프론트 연동까지 끝났다.
+  진행 중인 요청은 [`frontend/FRONTEND_HANDOFF.md`](frontend/FRONTEND_HANDOFF.md)/
+  [`frontend/BACKEND_HANDOFF.md`](frontend/BACKEND_HANDOFF.md)에 정리 중.
 - 리포지토리: [Ivy-cho/skillSNS](https://github.com/Ivy-cho/skillSNS)
 
 ---
@@ -43,9 +44,14 @@
 - [x] 채팅 이전 대화 이어보기 API(`GET /chat/{skill_id}/latest`)
 - [x] `test_frontend` 정적 페이지 제거, 문서 전체를 실제 코드 기준으로 정합성 점검
 
+### Phase 6 — 프론트 연동 완료 (2026.08.23)
+- [x] 피드 검색·페이징 프론트 연동 (300ms 디바운스 + 무한 스크롤)
+- [x] 채팅 이어보기 프론트 연동 (지난 대화 복원 + 인사말 유지)
+- [x] 마이페이지 프로필 사진·소개글 실제 값 반영
+
 ### 진행 중 / 다음
-- [ ] 프론트: 피드 검색·페이징 서버 연동, 마이페이지 프로필 사진·소개글 표시, 채팅
-      이어보기 연동 — [`frontend/FRONTEND_HANDOFF.md`](frontend/FRONTEND_HANDOFF.md)
+- [ ] 피드 응답에 작성자 프로필 사진 URL 추가 — `frontend/BACKEND_HANDOFF.md`
+- [ ] 스킬 수정 화면에서 카테고리 변경 가능하게 — `frontend/BACKEND_HANDOFF.md`
 - [ ] 계정 provider(구글/카카오) 간 통합 — 필요성 판단 후 보류 중
 
 ---
@@ -81,9 +87,8 @@
 - **스킬과 대화하기** — 게시된 스킬의 시스템 프롬프트로 실제 LLM과 대화. 대화 세션은
   LangGraph의 Postgres 체크포인터에 저장되어 이어서 대화할 수 있다.
 - **피드** — 전체 공개 스킬을 최신순으로 보여주고, 제목·소개·작성자·카테고리로
-  DB 서버 사이드 검색(`ILIKE`) + `limit`/`offset` 페이징 지원. 상단 "요즘 뜨는 스킬"은
-  조회수 기준(동률이면 이름순) 트렌딩. (프론트는 아직 서버 검색/페이징에 안 붙어있음 —
-  `frontend/FRONTEND_HANDOFF.md` 참고)
+  DB 서버 사이드 검색(`ILIKE`) + `limit`/`offset` 무한 스크롤 페이징. 상단 "요즘 뜨는 스킬"은
+  조회수 기준(동률이면 이름순) 트렌딩.
 - **스크랩 + 폴더** — 마음에 드는 스킬을 폴더별로 정리해서 담아둔다.
 - **채팅 목록** — 내가 대화해본 스킬들을 최근 대화순으로 모아보고, 다시 들어가면 이어서
   대화할 수 있다.
@@ -91,24 +96,112 @@
 - **BYOK** — 대화하는 사람이 자기 Anthropic 키로 비용을 낸다. 서버는 공용 키를 들고
   있지 않는다.
 
-### 2.2 아키텍처
+### 2.2 아키텍처 (MSA)
 
-MSA로 나뉜 4개 서비스가 프론트엔드 하나를 함께 지원하고, 백엔드 3개는 같은 Supabase
-Postgres 인스턴스를 공유한다(서비스별 스키마 소유권은 지키되, 물리 DB는 하나).
+MSA로 나뉜 백엔드 3개가 프론트엔드 하나를 함께 지원한다. **API 게이트웨이는 없다** —
+프론트가 필요한 서비스에 직접 요청을 보낸다(각 서비스 URL을 `NEXT_PUBLIC_*` 환경변수로
+따로 들고 있음). 서비스 간에는 서로를 직접 호출하지 않고, 인증만 공유 비밀
+(`JWT_SECRET_KEY`)로 검증한다 — user-service가 발급한 JWT를 skill-service가 그대로
+믿고 검증하는 식.
 
 ```
-Next.js(frontend)
-   ├─ user-service   ── 소셜 로그인, JWT 발급, 프로필
-   ├─ skill-service  ── 스킬 CRUD, AI 대화, 스킬 생성 파이프라인, 스크랩, BYOK
-   └─ feed-service   ── skills/users/scraps를 읽기 전용 조인, 피드 제공
-                (셋 다 Supabase Postgres 하나를 공유)
+                        ┌───────────────────┐
+                        │  Next.js frontend │
+                        └─────────┬─────────┘
+              ┌────────────────────┼────────────────────┐
+              ▼                    ▼                     ▼
+   ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+   │  user-service    │  │  skill-service    │  │  feed-service    │
+   │  :8001           │  │  :8002            │  │  :8003           │
+   │  소셜 로그인      │  │  스킬 CRUD/대화    │  │  skills/users/   │
+   │  JWT 발급/검증    │  │  스킬 생성 파이프  │  │  scraps 조인만    │
+   │  프로필           │  │  라인, 스크랩, BYOK │  │  (자기 테이블 없음)│
+   └────────┬─────────┘  └─────────┬────────┘  └─────────┬────────┘
+            │                      │                      │
+            └──────────────────────┼──────────────────────┘
+                                    ▼
+                     Supabase Postgres (물리 DB 1개)
 ```
+
+- **왜 물리 DB가 하나인가**: 서비스별로 스키마(테이블) 소유권은 나누되, 별도 DB
+  인스턴스로 쪼개진 않았다. 토이 프로젝트 규모에서 DB 3개를 따로 운영하는 관리 비용이
+  MSA의 격리 이점보다 커서 내린 절충이다(`docs/tech-decisions.md`).
+- **서비스 간 FK는 없다**: 예를 들어 `skills.user_id`는 물리적으로 `users.id`를
+  가리키지만, DB 레벨 `FOREIGN KEY` 제약은 걸려있지 않다 — 서로 다른 서비스가 소유한
+  테이블을 애플리케이션 코드로 참조·조인만 한다(자세한 내용은 2.3절).
+- **feed-service는 자기 테이블이 없다**: `skills`/`users`/`scraps`를 읽기 전용으로
+  조인해서 보여주기만 하는, 3개 중 유일하게 "쓰기"가 없는 서비스다.
 
 | 서비스 | 포트 | 역할 |
 |---|---|---|
 | user-service | 8001 | 소셜 로그인 / JWT 인증 / 프로필 |
 | skill-service | 8002 | 스킬 CRUD / AI 에이전트 대화 / 스킬 생성 파이프라인 / 스크랩 / BYOK |
-| feed-service | 8003 | 피드 조회 (skills/users/scraps를 읽기 전용으로 조회) |
+| feed-service | 8003 | 피드 조회 (skills/users/scraps를 읽기 전용으로 조회, 자체 테이블 없음) |
+
+### 2.3 DB 구조
+
+서비스별 테이블 소유권 기준으로 나열. 화살표(`→`)는 애플리케이션 레벨 참조이고, 실제
+DB `FOREIGN KEY` 제약은 **같은 서비스가 소유한 테이블 사이에만** 걸려 있다 — 서비스
+경계를 넘는 화살표(예: `skills.user_id → users.id`)는 제약 없이 값만 맞춰서 쓴다.
+
+```
+┌─────────────────────────┐        ┌──────────────────────────────┐
+│ user-service             │        │ skill-service                  │
+│                          │        │                                │
+│ users                    │◄───┐   │ skills                         │
+│  id (PK)                 │    │   │  id (PK)                       │
+│  email, nickname         │    ├───┼─ user_id ─┘  (FK 없음, 값만 참조)│
+│  provider, provider_id   │    │   │  title, description, md_content│
+│  bio, avatar_url         │    │   │  category, view_count          │
+│  created_at, updated_at  │    │   │                                │
+│                          │    │   │ chat_sessions                  │
+│ refresh_tokens           │    │   │  id (PK)                       │
+│  id (PK)                 │    │   │  user_id ─┘                    │
+│  user_id (FK→users.id)   │    │   │  skill_id (FK→skills.id)       │
+│  token, expires_at       │    │   │  thread_id (LangGraph 연결)     │
+└─────────────────────────┘    │   │  updated_at (목록 정렬용)        │
+                                │   │                                │
+┌─────────────────────────┐    │   │ skill_drafts                   │
+│ feed-service              │    │   │  id (PK)                       │
+│  (자체 테이블 없음)         │    │   │  user_id ─┘                    │
+│  users/skills/scraps를    │    │   │  thread_id, stage               │
+│  읽기 전용 LEFT JOIN       │    │   │  skill_info (JSONB, 단일 누적)  │
+└─────────────────────────┘    │   │                                │
+                                │   │ scrap_folders                  │
+                                │   │  id (PK)                       │
+                                │   │  user_id ─┘                    │
+                                │   │  name                          │
+                                │   │                                │
+                                │   │ scraps                         │
+                                │   │  id (PK)                       │
+                                └───┼─ user_id                       │
+                                    │  skill_id (FK→skills.id)       │
+                                    │  folder_id (FK→scrap_folders.id)│
+                                    │  UNIQUE(user_id, skill_id)      │
+                                    │                                │
+                                    │ user_secrets                   │
+                                    │  user_id (PK) ─┘                │
+                                    │  anthropic_api_key_encrypted   │
+                                    │  (BYOK, Fernet 암호화)          │
+                                    └────────────────────────────────┘
+
++ LangGraph checkpointer 테이블들 (skill-service, 자동 생성/관리)
+  대화·스킬생성 메시지 이력 본문 저장 — thread_id로 chat_sessions/skill_drafts와 연결
+```
+
+| 테이블 | 소유 서비스 | 역할 | 비고 |
+|---|---|---|---|
+| `users` | user-service | 계정 | `(provider, provider_id)`로 식별, provider 다르면 별개 계정 |
+| `refresh_tokens` | user-service | 리프레시 토큰 | 로그아웃 시 삭제, 1인 1토큰 |
+| `skills` | skill-service | 등록된 스킬 | `category`는 자유 텍스트(정규화 테이블 없음) |
+| `chat_sessions` | skill-service | 대화 세션 메타 | 실제 메시지 본문은 없음(체크포인터가 보관) |
+| `skill_drafts` | skill-service | 스킬 생성 진행 상태 | `skill_info` JSONB 하나에 5단계 결과 누적 |
+| `scrap_folders` / `scraps` | skill-service | 스크랩 | 유저-스킬 조합은 폴더 무관하게 유일 |
+| `user_secrets` | skill-service | BYOK 키 | `user_id`가 PK, 평문은 절대 안 내려줌 |
+| (checkpointer 테이블) | skill-service | 대화·생성 메시지 이력 | LangGraph `AsyncPostgresSaver`가 자동 관리 |
+
+각 테이블의 정확한 컬럼/타입은 `docs/specs/user-service-login.md` 6절,
+`docs/specs/skill-service.md` 7절 참고.
 
 ---
 

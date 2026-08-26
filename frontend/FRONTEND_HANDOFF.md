@@ -166,6 +166,48 @@ Authorization: Bearer <access_token>
 
 ---
 
+## 5. 스킬 채팅 진입 시 인사말을 백엔드가 생성하도록 전환
+
+**현재 상태**: `SkillUsageChat.tsx:53-58`에서 채팅창에 들어가면 프론트가 즉석에서 만든
+고정 문구를 보여줌:
+```ts
+content: `안녕하세요! 저는 "${detail.title}" 스킬이에요. 무엇을 도와드릴까요?`,
+```
+스킬 제목만 들어가고 실제로 그 스킬이 뭘 도와주는지는 안 담겨 있어서, 어떤 스킬이든 첫
+인상이 똑같고 "뭘 도와드릴까요?"라고 되묻기만 함 — 사용자 입장에서 이 스킬이 뭘 하는
+스킬인지 스스로 알아내야 하는 문제가 있었습니다.
+
+**백엔드 준비 완료**: `POST /chat/{skill_id}`의 `message`가 이제 **선택**입니다. 생략(또는
+빈 문자열)하고 호출하면, 스킬의 시스템 프롬프트를 근거로 LLM이 직접
+"1~2문장 자기소개 + 이 스킬이 가장 먼저 물어야 할 질문 하나"를 한 번에 만들어
+반환합니다(`app/agent/graph.py`의 `OPENING_INSTRUCTIONS`). 응답 형식은 기존과 동일
+(`{ session_id, reply }`) — `session_id`도 이 호출에서 이미 발급되니 이어지는 대화는
+그대로 `continueChat`을 쓰면 됩니다.
+
+```
+POST /chat/{skill_id}
+{}                          // message 생략 = 오프닝 턴
+→ { "session_id": "uuid", "reply": "안녕하세요! 저는 이력서 첨삭을 도와드리는 전문가예요. 먼저 어떤 직무에 지원하실 예정인가요?" }
+```
+
+**할 일**:
+- `backendClient.ts`의 `startChat(skillId, message)`에서 `message`를 선택 인자로 바꾸기
+  (`export function startChat(skillId: string, message?: string)`, 생략 시 body를
+  `{}`로 보내거나 `message` 필드를 아예 안 담아서 전송)
+- `SkillUsageChat.tsx`의 마운트 로직(`getLatestChatSession`이 `null`을 돌려줄 때, 즉
+  지난 대화가 없을 때)에서: 지금처럼 클라이언트 인사말 문구를 만드는 대신
+  `startChat(skillId)`(message 없이)를 호출해서 받은 `reply`를 첫 메시지로,
+  `session_id`를 `sessionIdRef.current`로 세팅
+  - 지난 대화가 있는 경우(이어보기)는 그대로 유지 — 이땐 이미 실제 대화 이력이 있으니
+    오프닝 턴이 또 필요 없습니다
+- `continueChat`은 변경 없음 — 후속 메시지는 여전히 필수(`message` 비우면 422
+  `EMPTY_REQUEST`)
+- 참고: 오프닝 턴은 BYOK/무료 체험(위 4번) 대상이 **아닙니다** — 채팅창을 열기만 하는
+  건 항상 서버 기본 키로 무료입니다. 본인 키 요구·무료 횟수 소모는 사용자가 실제로 첫
+  메시지를 보내는 순간(`continueChat`)부터 시작됩니다.
+
+---
+
 ## 새로 드리는 요청
 
 프론트를 붙이면서 백엔드에 필요한 것이 생겼습니다. 상세는 `BACKEND_HANDOFF.md`에 적었습니다.

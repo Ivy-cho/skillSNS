@@ -34,7 +34,9 @@ class SkillDetail(SkillSummary):
 
 
 class ChatRequest(BaseModel):
-    message: str
+    # 새 대화를 열 때(POST /chat/{skill_id})는 생략 가능 — 생략하면 스킬이 스스로
+    # 소개하고 첫 질문을 던지는 "오프닝" 턴으로 처리된다. 대화 이어가기는 계속 필수.
+    message: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.graph import build_agent
+from app.core.config import settings
 from app.core.security import decode_token
 from app.db.database import get_db
 from app.models.skill import ChatSession, Skill
@@ -55,11 +56,19 @@ async def start_chat(
     if not skill:
         raise HTTPException(status_code=404, detail="SKILL_NOT_FOUND")
 
-    # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다 — 스킬을 찾지 못해
-    # 실패할 요청까지 무료 횟수를 깎으면 안 된다.
-    api_key = await resolve_llm_key(user_id, db)
-    if not api_key:
-        return ChatResponse(session_id=None, reply=NO_API_KEY_REPLY)
+    # message가 없으면(채팅창을 막 연 시점) 오프닝 턴 — 스킬이 스스로 소개하고 첫 질문을
+    # 바로 던진다. 이건 실제 대화가 아니라 메뉴판을 보여주는 것에 가까워서 무료 체험
+    # 횟수도 안 깎고 본인 키도 요구하지 않는다 — 항상 서버 기본 키로 공짜다. 진짜
+    # 체험/키 소모는 사용자가 첫 메시지를 실제로 보낼 때(continue_chat)부터 시작된다.
+    is_opening = not (body.message and body.message.strip())
+    if is_opening:
+        api_key = settings.ANTHROPIC_API_KEY
+    else:
+        # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다 — 스킬을 찾지 못해
+        # 실패할 요청까지 무료 횟수를 깎으면 안 된다.
+        api_key = await resolve_llm_key(user_id, db)
+        if not api_key:
+            return ChatResponse(session_id=None, reply=NO_API_KEY_REPLY)
 
     thread_id = str(uuid.uuid4())
     session = ChatSession(user_id=user_id, skill_id=skill_id, thread_id=thread_id)
@@ -67,9 +76,10 @@ async def start_chat(
     await db.commit()
     await db.refresh(session)
 
-    agent = build_agent(skill.md_content, request.app.state.checkpointer, api_key)
+    agent = build_agent(skill.md_content, request.app.state.checkpointer, api_key, opening=is_opening)
     config = {"configurable": {"thread_id": thread_id}}
-    result_state = await agent.ainvoke({"messages": [HumanMessage(content=body.message)]}, config)
+    human_content = body.message.strip() if not is_opening else "(대화 시작)"
+    result_state = await agent.ainvoke({"messages": [HumanMessage(content=human_content)]}, config)
     reply = result_state["messages"][-1].content
 
     return ChatResponse(session_id=session.id, reply=reply)
@@ -103,6 +113,8 @@ async def continue_chat(
         raise HTTPException(status_code=404, detail="SESSION_NOT_FOUND")
     if session.user_id != user_id:
         raise HTTPException(status_code=403, detail="FORBIDDEN")
+    if not body.message or not body.message.strip():
+        raise HTTPException(status_code=422, detail="EMPTY_REQUEST")
 
     # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다 — 위 검증에서
     # 실패할 요청까지 무료 횟수를 깎으면 안 된다.

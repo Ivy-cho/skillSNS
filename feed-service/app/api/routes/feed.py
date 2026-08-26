@@ -15,6 +15,7 @@ FEED_QUERY = text("""
         s.id, s.title, s.description, s.category, s.user_id, s.created_at,
         s.view_count,
         COALESCE(u.nickname, '알 수 없음') AS author_nickname,
+        u.avatar_url AS author_avatar_url,
         COALESCE(sc.cnt, 0) AS scrap_count
     FROM skills s
     LEFT JOIN users u ON u.id = s.user_id
@@ -32,6 +33,7 @@ FEED_SEARCH_QUERY = text("""
         s.id, s.title, s.description, s.category, s.user_id, s.created_at,
         s.view_count,
         COALESCE(u.nickname, '알 수 없음') AS author_nickname,
+        u.avatar_url AS author_avatar_url,
         COALESCE(sc.cnt, 0) AS scrap_count
     FROM skills s
     LEFT JOIN users u ON u.id = s.user_id

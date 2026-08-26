@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -19,6 +20,26 @@ from app.services.user_secrets import get_user_anthropic_key
 
 router = APIRouter(prefix="/skills/create", tags=["skill-creation"])
 bearer_scheme = HTTPBearer()
+
+# 단계 진행 순서 + 각 단계가 skill_info에 채우는 필드. revert 시 "이 단계로 되돌아간다"는
+# 그 단계 자신이 채우는 필드부터 그 뒤 단계가 채운 필드까지 전부 폐기한다는 뜻이다
+# (category만 어느 단계에도 안 묶여 있어서 항상 남는다).
+STAGE_ORDER = ["what_skill", "skill_content", "skill_name", "skill_test", "skill_improve"]
+STAGE_FIELDS = {
+    "what_skill": ("topic", "definition", "target"),
+    "skill_content": ("content",),
+    "skill_name": ("name",),
+    "skill_test": ("testReport",),
+    "skill_improve": ("content",),
+}
+# skill_improve는 "앞으로 가는" 분기라 되돌아갈 대상으로는 안 받는다(핸드오프 계약과 동일).
+REVERTIBLE_STAGES = ("what_skill", "skill_content", "skill_name", "skill_test")
+
+
+def _skill_info_before_stage(skill_info: dict, target_stage: str) -> dict:
+    idx = STAGE_ORDER.index(target_stage)
+    discard = {field for stage in STAGE_ORDER[idx:] for field in STAGE_FIELDS[stage]}
+    return {k: v for k, v in skill_info.items() if k not in discard}
 
 
 def _get_user_id(credentials: HTTPAuthorizationCredentials) -> str:
@@ -226,6 +247,36 @@ async def confirm_draft(
         category=draft.skill_info.get("category") or "미분류",
     )
     db.add(skill)
+    draft.confirmed_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(skill)
     return skill
+
+
+@router.post("/{draft_id}/revert", response_model=CreationResponse)
+async def revert_draft(
+    draft_id: str,
+    request: Request,
+    stage: str = Form(...),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    """"이 단계부터 수정" — 지정 stage 이후로 쌓인 skill_info/대화를 폐기하고 그 단계를
+    다시 시작한다. 이후 단계의 대화가 새 stage의 프롬프트/skill_info와 어긋나지 않도록,
+    이어쓰는 대신 새 thread_id로 아예 새로 시작한다(start_draft와 동일한 방식)."""
+    user_id = _get_user_id(credentials)
+    api_key = await _require_anthropic_key(user_id, db)
+    draft = await _load_draft(draft_id, user_id, db)
+
+    if stage not in REVERTIBLE_STAGES:
+        raise HTTPException(status_code=422, detail="INVALID_STAGE")
+    if draft.confirmed_at is not None:
+        raise HTTPException(status_code=409, detail="DRAFT_ALREADY_CONFIRMED")
+
+    draft.skill_info = _skill_info_before_stage(draft.skill_info, stage)
+    draft.stage = stage
+    draft.thread_id = str(uuid.uuid4())
+    await db.commit()
+    await db.refresh(draft)
+
+    return await _invoke(request, db, draft, human_message=None, api_key=api_key)

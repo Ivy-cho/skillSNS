@@ -1,11 +1,5 @@
 def merge_what_skill(skill_info: dict, args: dict) -> dict:
-    return {
-        **skill_info,
-        "category": args["category"],
-        "topic": args["topic"],
-        "definition": args["definition"],
-        "target": args["target"],
-    }
+    return {**skill_info, "topic": args["topic"], "definition": args["definition"], "target": args["target"]}
 
 
 def merge_content(skill_info: dict, args: dict) -> dict:

@@ -22,12 +22,11 @@ router = APIRouter(prefix="/skills/create", tags=["skill-creation"])
 bearer_scheme = HTTPBearer()
 
 # 단계 진행 순서 + 각 단계가 skill_info에 채우는 필드. revert 시 "이 단계로 되돌아간다"는
-# 그 단계 자신이 채우는 필드부터 그 뒤 단계가 채운 필드까지 전부 폐기한다는 뜻이다.
-# category는 더 이상 draft 시작 시 사람이 고르는 값이 아니라, what_skill 단계에서 대화
-# 내용을 보고 AI가 스스로 정하는 값이라 topic/definition/target과 같은 묶음이다.
+# 그 단계 자신이 채우는 필드부터 그 뒤 단계가 채운 필드까지 전부 폐기한다는 뜻이다
+# (category만 어느 단계에도 안 묶여 있어서 항상 남는다).
 STAGE_ORDER = ["what_skill", "skill_content", "skill_name", "skill_test", "skill_improve"]
 STAGE_FIELDS = {
-    "what_skill": ("category", "topic", "definition", "target"),
+    "what_skill": ("topic", "definition", "target"),
     "skill_content": ("content",),
     "skill_name": ("name",),
     "skill_test": ("testReport",),
@@ -131,9 +130,7 @@ async def _invoke(
 @router.post("", response_model=CreationResponse)
 async def start_draft(
     request: Request,
-    # 카테고리 선택 단계가 프론트에서 없어져서, 이제 what_skill 대화에서 AI가 스스로
-    # 정한다(WhatSkillOutput.category). 그래도 호출부가 넘겨주면 초기값으로 존중한다.
-    category: Optional[str] = Form(None),
+    category: str = Form(...),
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ):
@@ -143,7 +140,7 @@ async def start_draft(
         user_id=user_id,
         thread_id=str(uuid.uuid4()),
         stage="what_skill",
-        skill_info={"category": category} if category else {},
+        skill_info={"category": category},
     )
     db.add(draft)
     await db.commit()

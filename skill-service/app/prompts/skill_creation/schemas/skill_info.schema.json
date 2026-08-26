@@ -6,7 +6,7 @@
   "properties": {
     "category": {
       "type": "string",
-      "description": "2단계 what-skill. 사람이 고르지 않는다 — 대화 내용을 보고 AI가 스스로 정한다 (예: 인테리어)."
+      "description": "1단계. 사용자가 선택한 카테고리 (예: 인테리어)."
     },
     "topic": {
       "type": "string",

@@ -15,6 +15,7 @@ class SkillUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     md_content: Optional[str] = None
+    category: Optional[str] = None
 
 
 class SkillSummary(BaseModel):

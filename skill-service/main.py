@@ -45,6 +45,12 @@ async def lifespan(app: FastAPI):
                 "confirmed_at TIMESTAMPTZ"
             )
         )
+        await conn.execute(
+            text(
+                "ALTER TABLE user_secrets ADD COLUMN IF NOT EXISTS "
+                "free_turns_used INTEGER NOT NULL DEFAULT 0"
+            )
+        )
 
     # AsyncPostgresSaver.from_conn_string()은 커넥션 하나를 앱 수명 내내 물고 있어서,
     # Supabase 쪽 유휴 타임아웃에 걸려 끊기면 재연결 없이 계속 에러를 낸다(연결이 죽어도

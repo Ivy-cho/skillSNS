@@ -16,7 +16,7 @@ from app.models.skill import Skill, SkillDraft
 from app.schemas.creation import CreationResponse
 from app.schemas.skill import SkillSummary
 from app.services.ingest import IngestError, fetch_url_text, ingest_file
-from app.services.user_secrets import get_user_anthropic_key
+from app.services.user_secrets import resolve_llm_key
 
 router = APIRouter(prefix="/skills/create", tags=["skill-creation"])
 bearer_scheme = HTTPBearer()
@@ -51,9 +51,10 @@ def _get_user_id(credentials: HTTPAuthorizationCredentials) -> str:
 
 
 # 스킬 만들기는 첫 호출부터 끝까지 전부 LLM 호출이라, 로그인처럼 "안내만 반환"할 여지가
-# 없다 — 대화하는 사람이 자기 키로 낸다는 원칙에 따라 키가 없으면 바로 막는다.
+# 없다 — 본인 키가 없으면 무료 체험 한도(계정당 평생 3회, 생성·대화 합산) 안에서만
+# 서버 기본 키를 내주고, 그마저 다 썼으면 바로 막는다(resolve_llm_key 참고).
 async def _require_anthropic_key(user_id: str, db: AsyncSession) -> str:
-    api_key = await get_user_anthropic_key(user_id, db)
+    api_key = await resolve_llm_key(user_id, db)
     if not api_key:
         raise HTTPException(status_code=400, detail="ANTHROPIC_KEY_REQUIRED")
     return api_key
@@ -161,13 +162,14 @@ async def continue_draft(
     db: AsyncSession = Depends(get_db),
 ):
     user_id = _get_user_id(credentials)
-    api_key = await _require_anthropic_key(user_id, db)
     draft = await _load_draft(draft_id, user_id, db)
 
     combined = await _combine_sources(message, links, files)
     if not combined:
         raise HTTPException(status_code=422, detail="EMPTY_REQUEST")
 
+    # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다.
+    api_key = await _require_anthropic_key(user_id, db)
     return await _invoke(request, db, draft, human_message=combined, api_key=api_key)
 
 
@@ -180,11 +182,12 @@ async def improve_draft(
 ):
     """04(skill_test) 결과를 보고 사용자가 "개선할게요"를 눌렀을 때."""
     user_id = _get_user_id(credentials)
-    api_key = await _require_anthropic_key(user_id, db)
     draft = await _load_draft(draft_id, user_id, db)
     if draft.stage != "skill_test" or not draft.skill_info.get("testReport"):
         raise HTTPException(status_code=409, detail="NOT_READY_TO_IMPROVE")
 
+    # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다.
+    api_key = await _require_anthropic_key(user_id, db)
     draft.stage = "skill_improve"
     await db.commit()
     await db.refresh(draft)
@@ -200,11 +203,12 @@ async def retest_draft(
 ):
     """05(skill_improve) 이후 사용자가 "다시 테스트"를 눌렀을 때."""
     user_id = _get_user_id(credentials)
-    api_key = await _require_anthropic_key(user_id, db)
     draft = await _load_draft(draft_id, user_id, db)
     if draft.stage != "skill_improve":
         raise HTTPException(status_code=409, detail="NOT_READY_TO_RETEST")
 
+    # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다.
+    api_key = await _require_anthropic_key(user_id, db)
     draft.stage = "skill_test"
     await db.commit()
     await db.refresh(draft)
@@ -268,7 +272,6 @@ async def revert_draft(
     다시 시작한다. 이후 단계의 대화가 새 stage의 프롬프트/skill_info와 어긋나지 않도록,
     이어쓰는 대신 새 thread_id로 아예 새로 시작한다(start_draft와 동일한 방식)."""
     user_id = _get_user_id(credentials)
-    api_key = await _require_anthropic_key(user_id, db)
     draft = await _load_draft(draft_id, user_id, db)
 
     if stage not in REVERTIBLE_STAGES:
@@ -276,6 +279,8 @@ async def revert_draft(
     if draft.confirmed_at is not None:
         raise HTTPException(status_code=409, detail="DRAFT_ALREADY_CONFIRMED")
 
+    # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다.
+    api_key = await _require_anthropic_key(user_id, db)
     draft.skill_info = _skill_info_before_stage(draft.skill_info, stage)
     draft.stage = stage
     draft.thread_id = str(uuid.uuid4())

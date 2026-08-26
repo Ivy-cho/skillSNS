@@ -4,8 +4,9 @@ from pydantic import BaseModel, Field
 
 
 class WhatSkillOutput(BaseModel):
-    """1단계(what-skill) 완료 시 호출. 스킬 주제/한 줄 정의/타겟을 확정한다."""
+    """1단계(what-skill) 완료 시 호출. 스킬 주제/한 줄 정의/타겟/카테고리를 확정한다."""
 
+    category: str = Field(description="분야 카테고리. 대화에서 파악한 분야명(예: 인테리어, 커리어)")
     topic: str = Field(description="스킬 주제. 무엇에 관한 스킬인지")
     definition: str = Field(description="한 줄 정의. 무엇을 도와주는지 한 문장")
     target: str = Field(description="타겟. 누구를 위한, 어떤 상황인지")

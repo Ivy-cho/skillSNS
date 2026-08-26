@@ -67,6 +67,8 @@ class SkillDraft(Base):
     #  이 컬럼들을 읽던 옛 creator_graph.py/skill_creator.py 라우트는 이 설계로 완전히 대체돼 삭제됨.)
     stage: Mapped[str] = mapped_column(String, nullable=False, default="what_skill")
     skill_info: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # confirm() 시점에 채워진다 — 게시된 draft는 더 되돌릴 수 없게 막는 용도.
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

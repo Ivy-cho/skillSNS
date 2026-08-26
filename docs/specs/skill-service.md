@@ -334,7 +334,7 @@ Authorization: Bearer {access_token}
 |---|---|
 | Method | `POST` |
 | URL | `/chat/{skill_id}` |
-| 설명 | 새 대화 세션을 생성하고 첫 메시지를 전송한다. |
+| 설명 | 새 대화 세션을 생성한다. `message`를 생략하면 스킬이 스스로 소개하고 첫 질문을 던지는 "오프닝" 턴으로 처리된다. |
 | 인증 | Access Token 필요 (비로그인 시 안내 메시지 반환) |
 
 **Request Body**
@@ -343,12 +343,28 @@ Authorization: Bearer {access_token}
   "message": "Python에서 async/await를 설명해줘"
 }
 ```
+`message`는 선택이다. 생략(또는 빈 문자열)하면 사용자 메시지 없이 세션만 만들고, 스킬의
+시스템 프롬프트(`md_content`)를 근거로 "1~2문장 자기소개 + 이 스킬이 가장 먼저 물어야
+할 질문 하나"를 한 번에 응답한다(`app/agent/graph.py`의 `OPENING_INSTRUCTIONS`). 채팅
+화면 진입 시 이 방식으로 세션을 열면, 프론트가 임의로 인사말을 지어낼 필요가 없다.
 
-**응답 - 로그인 (200 OK)**
+이 오프닝 턴은 BYOK/무료 체험 대상이 아니다 — 항상 서버 기본 키(`ANTHROPIC_API_KEY`)로
+무료다. 본인 키 요구·무료 체험(3회) 소모는 사용자가 실제 메시지를 보내는 시점부터
+시작된다(`message`가 있는 이 호출, 또는 뒤이은 6-8 대화 이어가기).
+
+**응답 - 로그인, message 있음 (200 OK)**
 ```json
 {
   "session_id": "uuid",
   "reply": "Python의 async/await는..."
+}
+```
+
+**응답 - 로그인, message 생략(오프닝 턴) (200 OK)**
+```json
+{
+  "session_id": "uuid",
+  "reply": "안녕하세요! 저는 이력서 첨삭을 도와드리는 전문가예요. 먼저 어떤 직무에 지원하실 예정인가요?"
 }
 ```
 
@@ -405,6 +421,7 @@ Authorization: Bearer {access_token}
 | 403 | FORBIDDEN | 본인 세션이 아님 |
 | 404 | SKILL_NOT_FOUND | 존재하지 않는 스킬 |
 | 404 | SESSION_NOT_FOUND | 존재하지 않는 세션 |
+| 422 | EMPTY_REQUEST | `message`가 비어있음 — 6-7과 달리 이어가기는 오프닝 턴이 없어 계속 필수 |
 
 ---
 

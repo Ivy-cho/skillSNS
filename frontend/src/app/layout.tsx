@@ -25,6 +25,12 @@ const plexSansKR = localFont({
 export const metadata: Metadata = {
   title: "토마토",
   description: "누구나 자신의 노하우를 스킬로 만들고 공유하는 서비스",
+  // 홈 화면에 추가 시 iOS가 쓰는 설정. 아이콘은 app/apple-icon.png를 Next가 자동 링크한다.
+  appleWebApp: {
+    capable: true,
+    title: "토마토",
+    statusBarStyle: "default",
+  },
 };
 
 export default function RootLayout({

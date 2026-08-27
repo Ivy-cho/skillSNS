@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { BackButton } from "@/components/nav/BackButton";
 import { getSkill, updateSkill } from "@/lib/backendClient";
-import { categoryMeta } from "@/components/skill-creator/types";
 
 const TITLE_MAX = 40;
 
@@ -18,6 +17,7 @@ export function EditSkillForm({ skillId }: { skillId: string }) {
   const [title, setTitle] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [category, setCategory] = useState("");
+  const [categoryEmoji, setCategoryEmoji] = useState("🏷️");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -30,6 +30,7 @@ export function EditSkillForm({ skillId }: { skillId: string }) {
         setTitle(skill.title);
         setPrompt(skill.md_content);
         setCategory(skill.category);
+        setCategoryEmoji(skill.category_emoji);
       })
       .catch((e) => {
         if (!cancelled) {
@@ -62,8 +63,6 @@ export function EditSkillForm({ skillId }: { skillId: string }) {
       setSaving(false);
     }
   }
-
-  const shownCategory = categoryMeta(category, "🏷️");
 
   return (
     <AuthGate>
@@ -123,14 +122,14 @@ export function EditSkillForm({ skillId }: { skillId: string }) {
                 />
               </div>
 
-              {/* 카테고리 — 백엔드가 아직 수정을 받지 않아 보여주기만 한다. */}
+              {/* 카테고리 — 시스템이 스킬 내용을 보고 자동으로 정하므로 읽기 전용으로만 보여준다. */}
               <div className="mt-4">
                 <span className="text-[0.8rem] font-semibold text-ink">카테고리</span>
                 <div className="mt-1.5 flex items-center gap-2">
                   <span className="rounded-full border border-border bg-surface-2 px-3 py-1.5 text-[0.8rem] text-muted">
-                    {`${shownCategory.emoji} ${shownCategory.label}`}
+                    {`${categoryEmoji} ${category}`}
                   </span>
-                  <span className="text-[0.7rem] text-muted">아직 바꿀 수 없어요</span>
+                  <span className="text-[0.7rem] text-muted">자동으로 정해져요</span>
                 </div>
               </div>
 

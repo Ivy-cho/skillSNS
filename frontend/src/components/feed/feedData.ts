@@ -2,11 +2,10 @@
 // 불러온 카드에서 클라이언트가 직접 정렬해 뽑는다(toTrending) — 조회수 내림차순,
 // 조회수가 같으면 스킬 이름 오름차순(가나다순).
 //
-// 카테고리는 skill-creator의 실제 CATEGORIES 6개(글쓰기/인테리어/커리어/재테크/바이브 코딩/기타)
-// id를 그대로 쓴다. Q&A(대표 질답 미리보기)는 저장되는 데이터가 아니라 아직 없다 — FeedCard가
-// 빈 값이면 알아서 숨긴다.
+// 카테고리 이름·이모지는 feed-service가 categories 테이블을 조인해 내려준다(item.category /
+// item.category_emoji). 프론트에서 라벨↔id 변환을 하지 않는다. Q&A(대표 질답 미리보기)는
+// 저장되는 데이터가 아니라 아직 없다 — FeedCard가 빈 값이면 알아서 숨긴다.
 
-import { CATEGORIES, categoryMeta } from "../skill-creator/types";
 import type { FeedCard, TrendingItem } from "./types";
 
 const FEED_SERVICE_URL = process.env.NEXT_PUBLIC_FEED_SERVICE_URL ?? "";
@@ -16,7 +15,8 @@ type FeedItem = {
   id: string;
   title: string;
   description: string | null;
-  category: string;
+  category: string; // 소분류 이름
+  category_emoji: string; // 소분류 이모지
   user_id: string;
   author_nickname: string;
   // 작성자가 등록한 프로필 사진. feed-service가 아직 안 내려주는 동안은 undefined라
@@ -46,15 +46,12 @@ export function toTrending(cards: FeedCard[], n = 4): TrendingItem[] {
 // feed-service 응답(FeedItem) → 피드 카드 매퍼.
 // 네트워크 경계라 타입이 보장되지 않으므로 누락 필드도 방어적으로 처리한다.
 export function toFeedCard(item: FeedItem): FeedCard {
-  // 백엔드 category는 한글 라벨("인테리어")이라 필터용 id("interior")로 변환한다.
-  // CATEGORIES(6개, "기타"=custom 포함)에서 라벨로 찾고, 없으면 원본 라벨을 그대로 둔다.
-  const matched = CATEGORIES.find((c) => c.label === item.category);
   const nickname = item.author_nickname || "익명";
   return {
     id: item.id,
-    categoryId: matched?.id ?? item.category,
-    // 직접 만든 카테고리("🎨 사진 보정")면 사용자가 고른 이모지를 그대로 쓴다.
-    emoji: categoryMeta(item.category, "🔥").emoji,
+    // categoryId는 필터용 식별자 — 이제 카테고리 이름을 그대로 쓴다(별도 프리셋 id 없음).
+    categoryId: item.category,
+    emoji: item.category_emoji ?? "🏷️",
     title: item.title,
     author: {
       name: nickname,

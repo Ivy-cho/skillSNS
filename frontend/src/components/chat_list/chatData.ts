@@ -3,12 +3,7 @@
 // ChatListItem이 비어있으면 알아서 숨긴다(마지막 메시지만 보여준다).
 
 import { listChatSessions } from "@/lib/backendClient";
-import { categoryMeta } from "../skill-creator/types";
 import type { Conversation } from "./types";
-
-function emojiForCategory(category: string): string {
-  return categoryMeta(category, "💬").emoji;
-}
 
 // ISO 시각 → "방금"/"3시간 전"/"어제"/"3일 전"/"1주 전" 같은 상대 표기.
 function toTimeLabel(iso: string): string {
@@ -31,7 +26,7 @@ export async function getChats(): Promise<Conversation[]> {
   return sessions.map((s) => ({
     id: s.skill_id,
     skillName: s.skill_title,
-    avatar: emojiForCategory(s.category),
+    avatar: s.category_emoji ?? "🏷️",
     summary: "",
     lastMessage: s.last_message,
     timeLabel: toTimeLabel(s.last_message_at),

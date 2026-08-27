@@ -28,8 +28,8 @@ import {
   type PublishedSkill,
 } from "@/lib/backendClient";
 
-// 카테고리 단계는 제거 — 분야는 "주제 정하기" 대화에서 함께 정한다. draft는 앱 로드 시
-// 자동 시작하며, 백엔드가 요구하는 category 값은 중립 기본값(DEFAULT_CATEGORY)으로 넣는다.
+// 카테고리 단계는 제거 — 카테고리는 이름 단계에서 서버(카테고리명 Agent)가 자동으로 정한다.
+// draft는 앱 로드 시 자동 시작한다.
 // (category phase는 자동 시작 로딩 동안의 초기 상태로만 잠깐 존재 — 첫 페이지=주제 정하기)
 const STEP_BY_PHASE: Record<Phase, number> = {
   category: 1,
@@ -86,10 +86,8 @@ function cleanAgentText(content: string, stripFields: boolean): string {
     .trim();
 }
 
-// 카테고리 단계를 없앤 뒤 백엔드 create가 요구하는 category 값의 중립 기본값.
-// "여러 분야"로 시작하면 첫 질문이 "평소 어떤 주제로 조언을 구하러 오나요?"처럼 열린 형태로
-// 나와, 분야를 대화에서 자연스럽게 정하게 된다. (실제 카테고리를 대화에서 확정·저장하는 건
-// 백엔드 몫 — BACKEND_HANDOFF.md 참고)
+// 화면 표시용 중립 기본값(생성 중 로딩 칩·버전 라벨용). 백엔드로는 보내지 않는다 —
+// 카테고리는 이름 단계에서 서버가 스킬 내용을 보고 자동으로 정한다.
 const DEFAULT_CATEGORY: Category = { id: "general", label: "여러 분야", emoji: "✨" };
 
 // 메시지 입력창을 띄우는 단계 = 에이전트와 대화하는 2·3·5·6단계.
@@ -265,7 +263,7 @@ const CONFIRM_ENTRY_STAGES = new Set(["skill_content", "skill_name", "skill_test
 
 export function SkillCreator() {
   const [phase, setPhase] = useState<Phase>("category");
-  // 렌더용: 이모지/id가 필요해 Category 객체로 따로 들고 있다 (backend엔 label만 보낸다).
+  // 렌더용: 화면에 쓸 이모지/id를 담아둔다(버전 라벨 등). 백엔드로는 보내지 않는다.
   const [category, setCategory] = useState<Category | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [skillInfo, setSkillInfo] = useState<SkillInfo>(EMPTY_SKILL_INFO);
@@ -379,8 +377,8 @@ export function SkillCreator() {
     }
   }
 
-  // 앱 로드 시 자동으로 draft를 시작한다 (카테고리 선택 단계 없음). 백엔드가 요구하는
-  // category는 중립 기본값으로 보내고, 실제 분야는 첫 단계(주제 정하기) 대화에서 정해진다.
+  // 앱 로드 시 자동으로 draft를 시작한다 (카테고리 선택 단계 없음). 카테고리는 보내지 않고,
+  // 이름 단계에서 서버(카테고리명 Agent)가 스킬 내용을 보고 자동으로 정한다.
   const startedRef = useRef(false);
   useEffect(() => {
     if (startedRef.current) return;
@@ -389,7 +387,7 @@ export function SkillCreator() {
       setCategory(DEFAULT_CATEGORY);
       setIsTyping(true);
       try {
-        const res = await startDraft(DEFAULT_CATEGORY.label);
+        const res = await startDraft();
         draftIdRef.current = res.draft_id;
         setDraftId(res.draft_id);
         await applyResponse(res);

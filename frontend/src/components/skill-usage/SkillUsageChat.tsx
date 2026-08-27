@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChatBubble } from "../skill-creator/ChatBubble";
 import { TypingIndicator } from "../skill-creator/TypingIndicator";
 import { ChatInputBar } from "../skill-creator/ChatInputBar";
-import { categoryMeta, type ChatMessage } from "../skill-creator/types";
+import { type ChatMessage } from "../skill-creator/types";
 import {
   continueChat,
   getLatestChatSession,
@@ -14,10 +14,6 @@ import {
 } from "@/lib/backendClient";
 import { BackButton } from "@/components/nav/BackButton";
 import { ScrapButton } from "./ScrapButton";
-
-function emojiForCategory(category: string): string {
-  return categoryMeta(category, "🤖").emoji;
-}
 
 export function SkillUsageChat({ skillId }: { skillId: string }) {
   const [skill, setSkill] = useState<SkillDetail | null>(null);
@@ -91,7 +87,7 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
     }
   }
 
-  const emoji = skill ? emojiForCategory(skill.category) : "🤖";
+  const emoji = skill?.category_emoji ?? "🤖";
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface sm:h-[720px] sm:max-w-[390px] sm:rounded-[20px] sm:border sm:border-border sm:shadow-md">

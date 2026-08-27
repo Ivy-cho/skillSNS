@@ -1,5 +1,6 @@
 from typing import Optional
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,3 +44,12 @@ async def resolve_llm_key(user_id: str, db: AsyncSession) -> Optional[str]:
     secret.free_turns_used += 1
     await db.commit()
     return settings.ANTHROPIC_API_KEY
+
+
+async def require_llm_key(user_id: str, db: AsyncSession) -> str:
+    """resolve_llm_key와 같되, 쓸 키가 없으면 400으로 막는다. 스킬 생성·카테고리 분류처럼
+    첫 호출부터 LLM이 필수라 '안내만 반환'할 여지가 없는 경로들이 공용으로 쓴다."""
+    api_key = await resolve_llm_key(user_id, db)
+    if not api_key:
+        raise HTTPException(status_code=400, detail="ANTHROPIC_KEY_REQUIRED")
+    return api_key

@@ -19,6 +19,7 @@ from app.api.routes.skills import router as skills_router
 from app.api.routes.user_secrets import router as user_secrets_router
 from app.core.config import settings
 from app.db.database import Base, engine
+from app.models.category import Category  # noqa: F401  # create_all이 categories 테이블을 만들도록 등록
 
 
 @asynccontextmanager

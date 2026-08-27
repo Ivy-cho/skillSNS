@@ -29,7 +29,8 @@ export type PublishedSkill = {
   user_id: string;
   title: string;
   description: string | null;
-  category: string;
+  category: string; // 소분류 이름 (서버가 id를 해석해 내려줌)
+  category_emoji: string; // 소분류 이모지
   created_at: string;
 };
 
@@ -90,10 +91,9 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
-export function startDraft(category: string) {
-  const form = new FormData();
-  form.append("category", category);
-  return postForm("/skills/create", form);
+export function startDraft() {
+  // 카테고리는 이름 단계에서 서버(카테고리명 Agent)가 정하므로 시작 시 보내지 않는다.
+  return postForm("/skills/create");
 }
 
 export function continueDraft(draftId: string, message: string, files: File[] = []) {
@@ -180,10 +180,10 @@ export async function deleteSkill(skillId: string): Promise<void> {
 // md_content가 그대로 이 스킬의 시스템 프롬프트가 되어 /skill/[id] 대화에 쓰인다.
 export function createSkillDirect(body: {
   title: string;
-  category: string;
   md_content: string;
   description?: string | null;
 }) {
+  // 카테고리는 서버가 스킬 내용을 보고 자동 분류하므로 보내지 않는다.
   return postJSON<PublishedSkill>("/skills", body);
 }
 
@@ -217,7 +217,8 @@ export function continueChat(skillId: string, sessionId: string, message: string
 export type ChatSessionSummary = {
   skill_id: string;
   skill_title: string;
-  category: string;
+  category: string; // 소분류 이름
+  category_emoji: string; // 소분류 이모지
   session_id: string;
   last_message: string;
   last_message_at: string;

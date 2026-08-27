@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { getCurrentUserId, getStoredUser, logout } from "@/lib/authClient";
 import { deleteSkill, listSkills, type PublishedSkill } from "@/lib/backendClient";
-import { categoryMeta } from "@/components/skill-creator/types";
 import { ScrapTab } from "@/components/home/ScrapTab";
 import { CreateSkillSheet } from "@/components/home/CreateSkillSheet";
 import { SwipeableRow } from "@/components/common/SwipeableRow";
@@ -15,10 +14,6 @@ import {
   notifySkillDeleted,
   subscribeScraps,
 } from "@/lib/scrapStore";
-
-function emojiFor(category: string) {
-  return categoryMeta(category, "🍅").emoji;
-}
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -186,7 +181,7 @@ export default function HomePage() {
                   className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3"
                 >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-surface-2 text-base">
-                  {emojiFor(skill.category)}
+                  {skill.category_emoji ?? "🏷️"}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[0.85rem] font-semibold leading-snug text-ink">

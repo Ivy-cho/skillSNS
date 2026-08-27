@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,13 +7,22 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent.category_classifier import classify_category
 from app.core.security import decode_token
 from app.db.database import get_db
 from app.models.skill import Skill
 from app.schemas.skill import MessageResponse, SkillCreate, SkillDetail, SkillSummary, SkillUpdate
+from app.services.categories import (
+    DEFAULT_CATEGORY_EMOJI,
+    get_display_map,
+    get_fallback_category_id,
+    resolve_display,
+)
+from app.services.user_secrets import resolve_llm_key
 
 router = APIRouter(prefix="/skills", tags=["skills"])
 bearer_scheme = HTTPBearer()
+logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=SkillSummary, status_code=201)
@@ -25,17 +35,32 @@ async def create_skill(
     if not payload or payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="UNAUTHORIZED")
 
+    user_id = payload["sub"]
+    # 카테고리는 카테고리명 Agent가 스킬 내용을 보고 자동으로 정한다. 다만 이건 부가기능이라,
+    # 키가 없거나 분류가 실패해도 사용자가 쓴 스킬 자체는 '미분류'로라도 반드시 저장한다.
+    category_id = None
+    api_key = await resolve_llm_key(user_id, db)
+    if api_key:
+        try:
+            category_id = await classify_category(body.md_content, api_key, db, definition=body.description or "")
+        except Exception:
+            await db.rollback()
+            logger.exception("카테고리 자동 분류 실패 — 미분류로 저장 (title=%s)", body.title)
+    if not category_id:
+        category_id = await get_fallback_category_id(db)
+
     skill = Skill(
-        user_id=payload["sub"],
+        user_id=user_id,
         title=body.title,
         description=body.description,
         md_content=body.md_content,
-        category=body.category,
+        category=category_id,
     )
     db.add(skill)
     await db.commit()
     await db.refresh(skill)
-    return skill
+    name, emoji = await resolve_display(db, skill.category)
+    return SkillSummary.build(skill, name, emoji)
 
 
 @router.get("", response_model=list[SkillSummary])
@@ -47,7 +72,12 @@ async def list_skills(
     if user_id:
         stmt = stmt.where(Skill.user_id == user_id)
     result = await db.execute(stmt.order_by(Skill.created_at.desc()))
-    return result.scalars().all()
+    skills = result.scalars().all()
+    disp = await get_display_map(db, [s.category for s in skills])
+    return [
+        SkillSummary.build(s, *disp.get(s.category, (s.category, DEFAULT_CATEGORY_EMOJI)))
+        for s in skills
+    ]
 
 
 @router.get("/{skill_id}/download")
@@ -84,7 +114,8 @@ async def get_skill(
         update(Skill).where(Skill.id == skill_id).values(view_count=Skill.view_count + 1)
     )
     await db.commit()
-    return skill
+    name, emoji = await resolve_display(db, skill.category)
+    return SkillDetail.build(skill, name, emoji)
 
 
 @router.patch("/{skill_id}", response_model=SkillDetail)
@@ -111,7 +142,8 @@ async def update_skill(
 
     await db.commit()
     await db.refresh(skill)
-    return skill
+    name, emoji = await resolve_display(db, skill.category)
+    return SkillDetail.build(skill, name, emoji)
 
 
 @router.delete("/{skill_id}", response_model=MessageResponse)

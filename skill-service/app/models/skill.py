@@ -16,11 +16,12 @@ class Skill(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     md_content: Mapped[str] = mapped_column(Text, nullable=False)
-    # skill_drafts.skill_info.category에서 confirm 시점에 옮겨온다. 정규화된 카테고리
-    # 테이블은 두지 않는다 — "기타"로 사용자가 직접 입력하는 자유 텍스트도 허용해야 해서,
-    # 지금 규모에선 FK로 강제하는 게 오히려 과설계다. feed-service의 카테고리별 조회는
-    # 이 문자열 컬럼으로 필터링하면 된다.
-    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    # categories(소분류) 테이블의 id를 가리킨다 — 이름 단계에서 카테고리명 Agent가 정해
+    # confirm/생성 시점에 채워진다. DB에 FK 제약(fk_skills_category)이 걸려 있고, 표시용
+    # 이름·이모지는 feed/skill-service가 categories를 조인해 해석한다.
+    category: Mapped[str] = mapped_column(
+        String(50), ForeignKey("categories.id"), nullable=False
+    )
     # 피드 "요즘 뜨는 스킬" 정렬 기준. GET /skills/{id}(상세 조회=열람)마다 1씩 늘어난다.
     # Core update()로만 건드려서 updated_at(onupdate)이 조회만으로 같이 바뀌지 않게 한다.
     view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

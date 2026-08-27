@@ -9,7 +9,10 @@ PROMPTS_DIR = Path(__file__).resolve().parents[2] / "prompts" / "skill_creation"
 VARIABLE_MAP = {
     "카테고리": "category",
     "스킬 주제": "topic",
+    "한 줄 정의": "definition",
     "타겟": "target",
+    # 카테고리명 Agent(06-category.md)가 쓰는 현재 택소노미 트리. classify_category가 이 키로 주입한다.
+    "기존 카테고리": "_taxonomy",
 }
 
 

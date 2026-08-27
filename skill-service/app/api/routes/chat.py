@@ -20,6 +20,7 @@ from app.schemas.skill import (
     ChatSessionSummary,
     MessageItem,
 )
+from app.services.categories import DEFAULT_CATEGORY_EMOJI, get_display_map
 from app.services.user_secrets import resolve_llm_key
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -152,6 +153,7 @@ async def list_chat_sessions(
         .order_by(ChatSession.updated_at.desc())
     )
     rows = result.all()
+    disp = await get_display_map(db, [category for _, _, category in rows])
 
     summaries = []
     for session, skill_title, category in rows:
@@ -164,11 +166,13 @@ async def list_chat_sessions(
         if state and state.values.get("messages"):
             last_message = state.values["messages"][-1].content
 
+        cat_name, cat_emoji = disp.get(category, (category, DEFAULT_CATEGORY_EMOJI))
         summaries.append(
             ChatSessionSummary(
                 skill_id=session.skill_id,
                 skill_title=skill_title,
-                category=category,
+                category=cat_name,
+                category_emoji=cat_emoji,
                 session_id=session.id,
                 last_message=last_message,
                 last_message_at=session.updated_at,

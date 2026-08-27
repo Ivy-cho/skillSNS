@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -8,6 +9,7 @@ from langchain_core.messages import HumanMessage
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent.category_classifier import classify_category
 from app.agent.creator import build_creator_graph
 from app.agent.creator.render import render_md_content
 from app.core.security import decode_token
@@ -15,15 +17,18 @@ from app.db.database import get_db
 from app.models.skill import Skill, SkillDraft
 from app.schemas.creation import CreationResponse
 from app.schemas.skill import SkillSummary
+from app.services.categories import get_fallback_category_id, resolve_display
 from app.services.ingest import IngestError, fetch_url_text, ingest_file
-from app.services.user_secrets import resolve_llm_key
+from app.services.user_secrets import require_llm_key, resolve_llm_key
 
 router = APIRouter(prefix="/skills/create", tags=["skill-creation"])
 bearer_scheme = HTTPBearer()
+logger = logging.getLogger(__name__)
 
 # 단계 진행 순서 + 각 단계가 skill_info에 채우는 필드. revert 시 "이 단계로 되돌아간다"는
-# 그 단계 자신이 채우는 필드부터 그 뒤 단계가 채운 필드까지 전부 폐기한다는 뜻이다
-# (category만 어느 단계에도 안 묶여 있어서 항상 남는다).
+# 그 단계 자신이 채우는 필드부터 그 뒤 단계가 채운 필드까지 전부 폐기한다는 뜻이다.
+# (category는 skill_name 확정 시 카테고리명 Agent가 정하므로, skill_name 이하로 되돌아가면 함께
+#  폐기해 다시 정하게 한다 — 아래 _skill_info_before_stage 참고.)
 STAGE_ORDER = ["what_skill", "skill_content", "skill_name", "skill_test", "skill_improve"]
 STAGE_FIELDS = {
     "what_skill": ("topic", "definition", "target"),
@@ -39,6 +44,9 @@ REVERTIBLE_STAGES = ("what_skill", "skill_content", "skill_name", "skill_test")
 def _skill_info_before_stage(skill_info: dict, target_stage: str) -> dict:
     idx = STAGE_ORDER.index(target_stage)
     discard = {field for stage in STAGE_ORDER[idx:] for field in STAGE_FIELDS[stage]}
+    # 카테고리는 skill_name 확정 시 정해지므로, skill_name 이하로 되돌아가면 다시 정하도록 폐기한다.
+    if idx <= STAGE_ORDER.index("skill_name"):
+        discard.add("category")
     return {k: v for k, v in skill_info.items() if k not in discard}
 
 
@@ -47,16 +55,6 @@ def _get_user_id(credentials: HTTPAuthorizationCredentials) -> str:
     if not payload or payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="UNAUTHORIZED")
     return payload["sub"]
-
-
-# 스킬 만들기는 첫 호출부터 끝까지 전부 LLM 호출이라, 로그인처럼 "안내만 반환"할 여지가
-# 없다 — 본인 키가 없으면 무료 체험 한도(계정당 평생 3회, 생성·대화 합산) 안에서만
-# 서버 기본 키를 내주고, 그마저 다 썼으면 바로 막는다(resolve_llm_key 참고).
-async def _require_anthropic_key(user_id: str, db: AsyncSession) -> str:
-    api_key = await resolve_llm_key(user_id, db)
-    if not api_key:
-        raise HTTPException(status_code=400, detail="ANTHROPIC_KEY_REQUIRED")
-    return api_key
 
 
 async def _combine_sources(message: str, links: list[str], files: list[UploadFile]) -> str:
@@ -95,6 +93,26 @@ async def _load_draft(draft_id: str, user_id: str, db: AsyncSession) -> SkillDra
     return draft
 
 
+async def _classify(skill_info: dict, api_key: str, db: AsyncSession) -> str:
+    """카테고리명 Agent로 skill_info를 분류해 소분류 id를 얻는다."""
+    return await classify_category(
+        render_md_content(skill_info),
+        api_key,
+        db,
+        topic=skill_info.get("topic", "") or "",
+        definition=skill_info.get("definition", "") or "",
+        target=skill_info.get("target", "") or "",
+    )
+
+
+async def _ensure_category(draft: SkillDraft, api_key: str, db: AsyncSession) -> str:
+    """draft를 카테고리명 Agent로 분류해 skill_info["category"](소분류 id)를 채우고 그 id를 돌려준다.
+    이름 확정 시점(_invoke)과 confirm 안전망이 공용으로 쓴다."""
+    sub_id = await _classify(draft.skill_info, api_key, db)
+    draft.skill_info = {**draft.skill_info, "category": sub_id}
+    return sub_id
+
+
 async def _invoke(
     request: Request,
     db: AsyncSession,
@@ -108,14 +126,26 @@ async def _invoke(
     # Anthropic API는 system만 있고 messages가 비어있으면 400을 낸다. 카테고리 선택 직후처럼
     # 아직 사용자 메시지가 없는 시점(진입 문구만 필요한 상황)에도 최소 1개는 채워 보낸다.
     input_messages = [HumanMessage(content=human_message or "(진행)")]
+    prev_stage = draft.stage
     result_state = await agent.ainvoke(
         {"messages": input_messages, "skill_info": draft.skill_info, "stage": draft.stage}, config
     )
 
     draft.skill_info = result_state["skill_info"]
     draft.stage = result_state["stage"]
-    await db.commit()
+    await db.commit()  # stage 전진을 먼저 확정 — 뒤이은 분류 실패가 이 커밋을 오염시키지 못하게 격리
     await db.refresh(draft)
+
+    # 이름이 방금 확정됐으면(skill_name -> skill_test) 카테고리명 Agent가 대/소분류를 정해
+    # skill_info["category"]에 소분류 id를 채운다. best-effort라, 실패하면 롤백하고 넘어가
+    # confirm에서 다시 시도한다(그때도 실패하면 '미분류'로 저장).
+    if prev_stage == "skill_name" and draft.stage == "skill_test" and not draft.skill_info.get("category"):
+        try:
+            await _ensure_category(draft, api_key, db)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            logger.exception("카테고리 분류 실패 (draft_id=%s) — confirm 시 재시도", draft.id)
 
     return CreationResponse(
         draft_id=draft.id,
@@ -130,17 +160,17 @@ async def _invoke(
 @router.post("", response_model=CreationResponse)
 async def start_draft(
     request: Request,
-    category: str = Form(...),
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ):
     user_id = _get_user_id(credentials)
-    api_key = await _require_anthropic_key(user_id, db)
+    api_key = await require_llm_key(user_id, db)
+    # 카테고리는 더 이상 시작 시 사용자가 고르지 않는다 — 이름 단계에서 카테고리명 Agent가 정한다.
     draft = SkillDraft(
         user_id=user_id,
         thread_id=str(uuid.uuid4()),
         stage="what_skill",
-        skill_info={"category": category},
+        skill_info={},
     )
     db.add(draft)
     await db.commit()
@@ -166,7 +196,7 @@ async def continue_draft(
         raise HTTPException(status_code=422, detail="EMPTY_REQUEST")
 
     # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다.
-    api_key = await _require_anthropic_key(user_id, db)
+    api_key = await require_llm_key(user_id, db)
     return await _invoke(request, db, draft, human_message=combined, api_key=api_key)
 
 
@@ -184,7 +214,7 @@ async def improve_draft(
         raise HTTPException(status_code=409, detail="NOT_READY_TO_IMPROVE")
 
     # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다.
-    api_key = await _require_anthropic_key(user_id, db)
+    api_key = await require_llm_key(user_id, db)
     draft.stage = "skill_improve"
     await db.commit()
     await db.refresh(draft)
@@ -205,7 +235,7 @@ async def retest_draft(
         raise HTTPException(status_code=409, detail="NOT_READY_TO_RETEST")
 
     # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다.
-    api_key = await _require_anthropic_key(user_id, db)
+    api_key = await require_llm_key(user_id, db)
     draft.stage = "skill_test"
     await db.commit()
     await db.refresh(draft)
@@ -243,18 +273,34 @@ async def confirm_draft(
     if not name or not content:
         raise HTTPException(status_code=400, detail="DRAFT_NOT_READY")
 
+    # 카테고리(소분류 id)는 이름 단계에서 정해지지만, 그때 실패했을 수 있으니 없으면 여기서 한 번 더 정한다.
+    # 카테고리(소분류 id)는 이름 단계에서 정해지지만 실패했을 수 있다. 없으면 여기서 한 번 더
+    # 시도하되, 또 실패하거나 키가 없어도 사용자의 완성된 스킬은 '미분류'로라도 반드시 저장한다.
+    category_id = draft.skill_info.get("category")
+    if not category_id:
+        api_key = await resolve_llm_key(user_id, db)
+        if api_key:
+            try:
+                category_id = await _ensure_category(draft, api_key, db)
+            except Exception:
+                await db.rollback()
+                logger.exception("confirm 카테고리 분류 실패 — 미분류로 저장 (draft_id=%s)", draft.id)
+        if not category_id:
+            category_id = await get_fallback_category_id(db)
+
     skill = Skill(
         user_id=user_id,
         title=name,
         description=draft.skill_info.get("definition"),
         md_content=render_md_content(draft.skill_info),
-        category=draft.skill_info.get("category") or "미분류",
+        category=category_id,
     )
     db.add(skill)
     draft.confirmed_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(skill)
-    return skill
+    cat_name, cat_emoji = await resolve_display(db, skill.category)
+    return SkillSummary.build(skill, cat_name, cat_emoji)
 
 
 @router.post("/{draft_id}/revert", response_model=CreationResponse)
@@ -277,7 +323,7 @@ async def revert_draft(
         raise HTTPException(status_code=409, detail="DRAFT_ALREADY_CONFIRMED")
 
     # 무료 체험 카운트는 실제로 LLM을 부르기 직전에만 소모한다.
-    api_key = await _require_anthropic_key(user_id, db)
+    api_key = await require_llm_key(user_id, db)
     draft.skill_info = _skill_info_before_stage(draft.skill_info, stage)
     draft.stage = stage
     draft.thread_id = str(uuid.uuid4())

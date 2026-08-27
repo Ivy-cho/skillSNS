@@ -8,14 +8,15 @@ class SkillCreate(BaseModel):
     title: str
     description: Optional[str] = None
     md_content: str
-    category: str
+    # 카테고리는 서버가 카테고리명 Agent로 자동 분류하므로 클라이언트 값은 쓰지 않는다(하위호환용으로만 받음).
+    category: Optional[str] = None
 
 
 class SkillUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     md_content: Optional[str] = None
-    category: Optional[str] = None
+    # category는 카테고리명 Agent가 자동 관리하므로 사용자 수정 대상에서 뺀다.
 
 
 class SkillSummary(BaseModel):
@@ -23,14 +24,34 @@ class SkillSummary(BaseModel):
     user_id: str
     title: str
     description: Optional[str]
-    category: str
+    category: str  # 소분류 이름 (skills.category의 id를 categories와 대조해 해석한 값)
+    category_emoji: str = "🏷️"  # 소분류 이모지
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
+    @classmethod
+    def build(cls, skill, name: str, emoji: str) -> "SkillSummary":
+        return cls(
+            id=skill.id,
+            user_id=skill.user_id,
+            title=skill.title,
+            description=skill.description,
+            category=name,
+            category_emoji=emoji,
+            created_at=skill.created_at,
+        )
+
 
 class SkillDetail(SkillSummary):
     md_content: str
+
+    @classmethod
+    def build(cls, skill, name: str, emoji: str) -> "SkillDetail":
+        return cls(
+            **SkillSummary.build(skill, name, emoji).model_dump(),
+            md_content=skill.md_content,
+        )
 
 
 class ChatRequest(BaseModel):
@@ -58,7 +79,8 @@ class ChatHistoryResponse(BaseModel):
 class ChatSessionSummary(BaseModel):
     skill_id: str
     skill_title: str
-    category: str
+    category: str  # 소분류 이름
+    category_emoji: str = "🏷️"  # 소분류 이모지
     session_id: str
     last_message: str
     last_message_at: datetime

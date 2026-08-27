@@ -98,7 +98,6 @@ export function skillMarkdown(info: SkillInfo): string {
     .join("\n\n");
   return `# ${info.name}
 
-- 카테고리: ${info.category}
 - 주제: ${info.topic}
 - 한 줄 정의: ${info.definition}
 - 타겟: ${info.target}

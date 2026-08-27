@@ -5,12 +5,6 @@ import { useState } from "react";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { BackButton } from "@/components/nav/BackButton";
 import { createSkillDirect } from "@/lib/backendClient";
-import {
-  CATEGORIES,
-  toStoredCategory,
-  type Category,
-} from "@/components/skill-creator/types";
-import { CustomCategoryModal } from "@/components/skill-creator/CustomCategoryModal";
 
 const TITLE_MAX = 40;
 
@@ -19,9 +13,6 @@ const TITLE_MAX = 40;
 export default function NewSkillPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  // 고른 카테고리. "기타"를 누르면 직접 만들기 모달이 뜨고, 만든 것이 여기 들어온다.
-  const [category, setCategory] = useState<Category>(CATEGORIES[0]);
-  const [customOpen, setCustomOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,10 +27,8 @@ export default function NewSkillPage() {
     try {
       const skill = await createSkillDirect({
         title: title.trim(),
-        // 직접 만든 카테고리는 "🎨 사진 보정"처럼 이모지까지 함께 저장한다.
-        category: toStoredCategory(category),
         md_content: prompt.trim(),
-        // 목록에서 한눈에 보이도록 프롬프트 첫 줄을 설명으로 쓴다.
+        // 목록에서 한눈에 보이도록 프롬프트 첫 줄을 설명으로 쓴다. (카테고리는 서버가 자동 분류)
         description: prompt.trim().split("\n")[0].slice(0, 100),
       });
       // 등록 직후 바로 써볼 수 있게 그 스킬 대화 화면으로 보낸다.
@@ -102,36 +91,6 @@ export default function NewSkillPage() {
               />
             </div>
 
-            {/* 카테고리 */}
-            <div className="mt-4">
-              <span className="text-[0.8rem] font-semibold text-ink">카테고리</span>
-              <div className="mt-1.5 flex flex-wrap gap-2">
-                {CATEGORIES.map((c) => {
-                  const isCustomSlot = c.id === "custom";
-                  // "기타" 칸은 직접 만든 카테고리가 있으면 그것으로 바뀐다.
-                  const shown = isCustomSlot && category.id === "custom" ? category : c;
-                  const selected = category.label === shown.label;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => (isCustomSlot ? setCustomOpen(true) : setCategory(c))}
-                      className={`rounded-full border px-3 py-1.5 text-[0.8rem] transition active:scale-95 motion-reduce:transition-none ${
-                        selected
-                          ? "border-primary bg-primary-tint font-semibold text-primary-hover"
-                          : "border-border bg-surface text-ink"
-                      }`}
-                    >
-                      {shown.emoji} {shown.label}
-                      {isCustomSlot && category.id === "custom" && (
-                        <span className="ml-1 text-[0.68rem] text-muted">수정</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
             {/* 프롬프트 */}
             <div className="mt-4">
               <label htmlFor="prompt" className="text-[0.8rem] font-semibold text-ink">
@@ -154,18 +113,6 @@ export default function NewSkillPage() {
                 ⚠️ {error}
               </div>
             )}
-
-            <CustomCategoryModal
-              // 열 때마다 현재 값으로 다시 채우기 위해 key로 마운트를 새로 한다.
-              key={customOpen ? `${category.id}-${category.label}` : "closed"}
-              open={customOpen}
-              initial={category.id === "custom" ? category : null}
-              onClose={() => setCustomOpen(false)}
-              onCreate={(made) => {
-                setCategory(made);
-                setCustomOpen(false);
-              }}
-            />
           </div>
         </div>
       </main>

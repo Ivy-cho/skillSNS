@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select, update
@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.category_classifier import classify_category
 from app.core.security import decode_token
-from app.db.database import get_db
+from app.db.database import AsyncSessionLocal, get_db
 from app.models.skill import Skill
 from app.schemas.skill import MessageResponse, SkillCreate, SkillDetail, SkillSummary, SkillUpdate
 from app.services.categories import (
@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 @router.post("", response_model=SkillSummary, status_code=201)
 async def create_skill(
     body: SkillCreate,
+    background_tasks: BackgroundTasks,
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ):
@@ -36,19 +37,9 @@ async def create_skill(
         raise HTTPException(status_code=401, detail="UNAUTHORIZED")
 
     user_id = payload["sub"]
-    # 카테고리는 카테고리명 Agent가 스킬 내용을 보고 자동으로 정한다. 다만 이건 부가기능이라,
-    # 키가 없거나 분류가 실패해도 사용자가 쓴 스킬 자체는 '미분류'로라도 반드시 저장한다.
-    category_id = None
-    api_key = await resolve_llm_key(user_id, db)
-    if api_key:
-        try:
-            category_id = await classify_category(body.md_content, api_key, db, definition=body.description or "")
-        except Exception:
-            await db.rollback()
-            logger.exception("카테고리 자동 분류 실패 — 미분류로 저장 (title=%s)", body.title)
-    if not category_id:
-        category_id = await get_fallback_category_id(db)
-
+    # 저장은 즉시 끝낸다 — 카테고리는 일단 '미분류'로 넣고, 자동 분류(LLM 호출)는 응답을 보낸 뒤
+    # 백그라운드에서 채운다. 저장 요청이 느린 LLM 호출에 묶여 타임아웃/실패하지 않게 하기 위해서다.
+    category_id = await get_fallback_category_id(db)
     skill = Skill(
         user_id=user_id,
         title=body.title,
@@ -59,8 +50,30 @@ async def create_skill(
     db.add(skill)
     await db.commit()
     await db.refresh(skill)
+
+    background_tasks.add_task(
+        _categorize_skill_in_background, skill.id, user_id, body.md_content, body.description or ""
+    )
+
     name, emoji = await resolve_display(db, skill.category)
     return SkillSummary.build(skill, name, emoji)
+
+
+async def _categorize_skill_in_background(
+    skill_id: str, user_id: str, md_content: str, description: str
+) -> None:
+    """create_skill이 응답을 보낸 뒤 실행 — 카테고리명 Agent로 분류해 skills.category를 갱신한다.
+    실패해도 스킬은 이미 '미분류'로 저장돼 있어 유실되지 않는다(요청 경로와 분리된 별도 세션)."""
+    async with AsyncSessionLocal() as db:
+        try:
+            api_key = await resolve_llm_key(user_id, db)
+            if not api_key:
+                return
+            category_id = await classify_category(md_content, api_key, db, definition=description)
+            await db.execute(update(Skill).where(Skill.id == skill_id).values(category=category_id))
+            await db.commit()
+        except Exception:
+            logger.exception("백그라운드 카테고리 분류 실패 (skill_id=%s)", skill_id)
 
 
 @router.get("", response_model=list[SkillSummary])

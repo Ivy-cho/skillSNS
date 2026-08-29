@@ -180,8 +180,9 @@ export default function HomePage() {
                   href={`/skill/${skill.id}`}
                   className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3"
                 >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-surface-2 text-base">
-                  {skill.category_emoji ?? "🏷️"}
+                <span className="flex h-9 shrink-0 items-center gap-1 rounded-[10px] bg-surface-2 px-2 text-[0.72rem] font-medium text-muted">
+                  {skill.category || "미분류"}
+                  <span className="text-base">{skill.category_emoji ?? "🏷️"}</span>
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[0.85rem] font-semibold leading-snug text-ink">

@@ -155,6 +155,10 @@ export function SkillFeed() {
                     index === 0 ? "border-primary bg-primary-tint" : "border-border bg-surface"
                   }`}
                 >
+                  {/* categoryId엔 소분류 '이름'이 들어있다(feedData.toFeedCard 참고). 이모지 위에 라벨로 보여준다. */}
+                  <span className="max-w-full truncate text-[0.56rem] font-medium text-muted">
+                    {item.categoryId}
+                  </span>
                   <span className="text-xl">{item.emoji}</span>
                   <span className="text-center text-[0.66rem] font-semibold leading-tight text-ink">
                     {item.title}

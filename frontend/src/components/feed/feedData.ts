@@ -50,7 +50,8 @@ export function toFeedCard(item: FeedItem): FeedCard {
   return {
     id: item.id,
     // categoryId는 필터용 식별자 — 이제 카테고리 이름을 그대로 쓴다(별도 프리셋 id 없음).
-    categoryId: item.category,
+    // 이름은 화면에도 노출되므로 emoji와 똑같이 누락 시 '미분류'로 방어한다(빈 라벨 방지).
+    categoryId: item.category || "미분류",
     emoji: item.category_emoji ?? "🏷️",
     title: item.title,
     author: {

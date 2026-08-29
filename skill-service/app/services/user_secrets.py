@@ -32,7 +32,11 @@ async def resolve_llm_key(user_id: str, db: AsyncSession) -> Optional[str]:
     secret = result.scalar_one_or_none()
 
     if secret and secret.anthropic_api_key_encrypted:
-        return decrypt_secret(secret.anthropic_api_key_encrypted)
+        key = decrypt_secret(secret.anthropic_api_key_encrypted)
+        if key:
+            return key
+        # 복호화 실패(등록 키 손상·암호키 불일치) → 등록 안 한 것처럼 무료 체험으로 폴백한다.
+        # 예외로 죽지 않으니 대화·생성 요청이 500 대신 정상 흐름으로 이어진다.
 
     if not secret:
         secret = UserSecret(user_id=user_id)

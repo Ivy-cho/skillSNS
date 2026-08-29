@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -29,6 +30,21 @@ bearer_scheme = HTTPBearer(auto_error=False)
 UNAUTHENTICATED_REPLY = "전문가와 대화하려면 로그인이 필요합니다."
 # 무료 체험(계정당 평생 3회, 생성·대화 합산) 다 쓴 뒤에나 뜨는 안내 — resolve_llm_key 참고.
 NO_API_KEY_REPLY = "무료로 대화할 수 있는 횟수를 다 썼어요. 계속하려면 프로필에서 본인 Anthropic API 키를 등록해주세요."
+CHAT_ERROR_REPLY = "지금 답변을 만들지 못했어요. 잠시 후 다시 시도해 주세요."
+logger = logging.getLogger(__name__)
+
+
+async def _invoke_agent(agent, config: dict, human_content: str) -> str:
+    """에이전트를 호출해 답변 텍스트를 돌려준다. LLM 오류(키 무효·모델 오류 등)나 예상 밖
+    응답 형태에도 500으로 죽지 않고 안내 문구를 돌려준다 — 500 응답엔 CORS 헤더가 안 붙어
+    브라우저에 'failed to fetch'로 보이기 때문이다."""
+    try:
+        result_state = await agent.ainvoke({"messages": [HumanMessage(content=human_content)]}, config)
+        content = result_state["messages"][-1].content
+        return content if isinstance(content, str) else str(content)
+    except Exception:
+        logger.exception("채팅 에이전트 호출 실패")
+        return CHAT_ERROR_REPLY
 
 
 def _get_user_id(credentials: Optional[HTTPAuthorizationCredentials]) -> Optional[str]:
@@ -80,8 +96,7 @@ async def start_chat(
     agent = build_agent(skill.md_content, request.app.state.checkpointer, api_key, opening=is_opening)
     config = {"configurable": {"thread_id": thread_id}}
     human_content = body.message.strip() if not is_opening else "(대화 시작)"
-    result_state = await agent.ainvoke({"messages": [HumanMessage(content=human_content)]}, config)
-    reply = result_state["messages"][-1].content
+    reply = await _invoke_agent(agent, config, human_content)
 
     return ChatResponse(session_id=session.id, reply=reply)
 
@@ -125,8 +140,7 @@ async def continue_chat(
 
     agent = build_agent(skill.md_content, request.app.state.checkpointer, api_key)
     config = {"configurable": {"thread_id": session.thread_id}}
-    result_state = await agent.ainvoke({"messages": [HumanMessage(content=body.message)]}, config)
-    reply = result_state["messages"][-1].content
+    reply = await _invoke_agent(agent, config, body.message)
 
     # 채팅 목록을 최근 대화순으로 보여주기 위한 정렬 기준 갱신.
     session.updated_at = datetime.now(timezone.utc)

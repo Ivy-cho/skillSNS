@@ -209,12 +209,28 @@ export async function getLatestChatSession(skillId: string): Promise<ChatHistory
     // 로그인 전이거나 조회에 실패해도 대화 자체는 시작할 수 있어야 하니 새 대화로 본다.
     return null;
   }
-  const history: ChatHistory | null = await res.json();
-  if (!history) return null;
+  return stripOpeningPlaceholder(await res.json());
+}
 
-  // 자리표시자는 화면에 보일 이유가 없으니 걷어낸다. 맨 앞의 사용자 메시지 하나만 —
-  // 뒤쪽에 같은 글자를 진짜로 친 경우까지 지우면 안 된다.
-  // (백엔드가 아예 안 내려주게 요청해뒀다: BACKEND_HANDOFF.md)
+// 채팅 목록에서 고른 "그 대화"를 연다. /latest는 스킬의 가장 최근 대화만 주기 때문에,
+// 한 스킬에 대화가 여러 개면 목록에서 옛 대화를 눌러도 최근 것이 열려버린다.
+export async function getChatSession(
+  skillId: string,
+  sessionId: string,
+): Promise<ChatHistory | null> {
+  const res = await fetch(`${BACKEND_URL}/chat/${skillId}/${sessionId}`, {
+    headers: await authHeaders(),
+  });
+  // 지워졌거나 남의 대화면 새 대화로 시작하게 둔다.
+  if (!res.ok) return null;
+  return stripOpeningPlaceholder(await res.json());
+}
+
+// 자리표시자는 화면에 보일 이유가 없으니 걷어낸다. 맨 앞의 사용자 메시지 하나만 —
+// 뒤쪽에 같은 글자를 진짜로 친 경우까지 지우면 안 된다.
+// (백엔드가 아예 안 내려주게 요청해뒀다: BACKEND_HANDOFF.md)
+function stripOpeningPlaceholder(history: ChatHistory | null): ChatHistory | null {
+  if (!history) return null;
   const [first] = history.messages;
   if (first?.role === "user" && first.content.trim() === OPENING_PLACEHOLDER) {
     return { ...history, messages: history.messages.slice(1) };

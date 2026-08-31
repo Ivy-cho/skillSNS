@@ -2,14 +2,15 @@ import Link from "next/link";
 import { formatCount, type FeedCard as FeedCardData } from "./types";
 import { CategoryChip } from "@/components/common/CategoryChip";
 
-// 피드 카드 1개. 카드 전체를 눌러 해당 스킬 채팅(/skill/{id})으로 이동한다.
+// 피드 카드 1개. 카드 전체를 눌러 해당 스킬 채팅으로 이동한다.
+// new=1: 둘러보다 들어오는 자리라 지난 대화를 잇지 않고 새 대화로 연다.
 // shrink-0: 부모 스크롤 영역(flex-col, 고정 높이)에서 카드가 눌려 내용이 잘리지 않게 한다.
 export function FeedCard({ card }: { card: FeedCardData }) {
   const hasQa = Boolean(card.qa.q || card.qa.a);
 
   return (
     <Link
-      href={`/skill/${card.id}`}
+      href={`/skill/${card.id}?new=1`}
       className="block shrink-0 overflow-hidden rounded-[14px] border border-border bg-surface transition active:scale-[0.99]"
     >
       <div className="flex items-center gap-2.5 p-3">

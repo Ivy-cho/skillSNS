@@ -207,10 +207,10 @@ export function SkillFeed() {
             <h2 className="text-[0.72rem] font-semibold text-muted">요즘 뜨는 스킬 🔥</h2>
             <div className="-mx-3.5 flex gap-2 overflow-x-auto px-3.5 pb-1">
               {trendingItems.map((item, index) => (
-                // item.id가 스킬 id라 그대로 대화 화면으로 연결한다.
+                // item.id가 스킬 id라 그대로 대화 화면으로 연결한다(카드와 같이 새 대화로).
                 <Link
                   key={item.id}
-                  href={`/skill/${item.id}`}
+                  href={`/skill/${item.id}?new=1`}
                   className={`flex w-[92px] shrink-0 flex-col items-center gap-1 rounded-[12px] border-[1.5px] p-2.5 transition active:scale-[0.97] motion-reduce:transition-none ${
                     index === 0 ? "border-primary bg-primary-tint" : "border-border bg-surface"
                   }`}

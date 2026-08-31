@@ -26,6 +26,7 @@ export async function getChats(): Promise<Conversation[]> {
   const sessions = await listChatSessions();
   return sessions.map((s) => ({
     id: s.skill_id,
+    sessionId: s.session_id,
     skillName: s.skill_title,
     avatar: s.category_emoji ?? "🏷️",
     summary: "",

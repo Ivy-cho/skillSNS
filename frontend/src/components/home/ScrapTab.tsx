@@ -95,7 +95,7 @@ export function ScrapTab() {
               ]}
             >
               <Link
-                href={`/skill/${skill.id}`}
+                href={`/skill/${skill.id}?new=1`}
                 className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3"
               >
                 <CategoryChip name={skill.category} emoji={skill.category_emoji} />

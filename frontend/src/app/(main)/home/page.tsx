@@ -177,7 +177,7 @@ export default function HomePage() {
                 ]}
               >
                 <Link
-                  href={`/skill/${skill.id}`}
+                  href={`/skill/${skill.id}?new=1`}
                   className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3"
                 >
                 <span className="flex h-9 shrink-0 items-center gap-1 rounded-[10px] bg-surface-2 px-2 text-[0.72rem] font-medium text-muted">

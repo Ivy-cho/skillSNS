@@ -7,6 +7,7 @@ import { ChatInputBar } from "../skill-creator/ChatInputBar";
 import { type ChatMessage } from "../skill-creator/types";
 import {
   continueChat,
+  getChatSession,
   getLatestChatSession,
   getSkill,
   startChat,
@@ -25,6 +26,8 @@ const CATEGORY_POLL_TRIES = 6; // 최대 12초쯤 기다려 본다
 export function SkillUsageChat({
   skillId,
   justCreated = false,
+  startNew = false,
+  sessionId,
 }: {
   skillId: string;
   /**
@@ -33,6 +36,13 @@ export function SkillUsageChat({
    * 채팅 목록으로 보낸다 — 방금 만든 스킬이 목록 맨 위에 올라와 있다.
    */
   justCreated?: boolean;
+  /**
+   * 둘러보다 들어온 경우(피드 카드·트렌딩·내 스킬·스크랩). 지난 대화를 잇지 않고
+   * 새 대화로 연다. 채팅 목록에서 들어올 때만 이어보기다.
+   */
+  startNew?: boolean;
+  /** 채팅 목록에서 고른 '그 대화'. 없으면 이 스킬의 가장 최근 대화를 본다. */
+  sessionId?: string;
 }) {
   const [skill, setSkill] = useState<SkillDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -53,17 +63,26 @@ export function SkillUsageChat({
   }
 
   // 스킬 정보와 "지난 대화"를 함께 불러온다.
-  // 지난 대화가 있으면 그걸 복원하고, 없으면 message 없이 startChat을 호출해
-  // "오프닝 턴"(스킬이 스스로 소개하고 첫 질문을 던지는 응답)을 먼저 띄운다.
-  // 사용자가 뭐라도 쳐야 스킬이 입을 여는 상태를 없애기 위해서다.
+  // 이어보기(채팅 목록에서 진입)면 지난 대화를 복원하고, 그 밖에는 message 없이
+  // startChat을 호출해 "오프닝 턴"(스킬이 스스로 소개하고 첫 질문을 던지는 응답)을
+  // 먼저 띄운다. 사용자가 뭐라도 쳐야 스킬이 입을 여는 상태를 없애기 위해서다.
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getSkill(skillId), getLatestChatSession(skillId)])
+    Promise.all([
+      getSkill(skillId),
+      sessionId ? getChatSession(skillId, sessionId) : getLatestChatSession(skillId),
+    ])
       .then(async ([detail, history]) => {
         if (cancelled) return;
         setSkill(detail);
 
-        if (history && history.messages.length > 0) {
+        // 아직 아무 말도 안 건 대화(스킬의 오프닝 인사만 있는 상태). 새 대화를 원하더라도
+        // 이건 그대로 다시 쓴다 — 안 그러면 피드에서 눌러보기만 해도 채팅 목록에
+        // 빈 대화가 한 줄씩 쌓인다(서버가 세션을 스킬별로 묶지 않는다).
+        const untouched =
+          !!history && history.messages.length > 0 && history.messages.every((m) => m.role !== "user");
+
+        if (history && history.messages.length > 0 && (!startNew || untouched)) {
           sessionIdRef.current = history.session_id;
           setMessages(
             history.messages.map((m) => ({
@@ -101,7 +120,7 @@ export function SkillUsageChat({
     return () => {
       cancelled = true;
     };
-  }, [skillId]);
+  }, [skillId, startNew, sessionId]);
 
   // 방금 만든 스킬은 카테고리가 아직 안 붙어 있다(백그라운드 분류). 채워지면 헤더에
   // 반영되도록 잠깐만 다시 물어본다 — 끝나면 스스로 멈춘다.

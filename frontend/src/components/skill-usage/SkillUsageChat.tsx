@@ -22,7 +22,18 @@ const UNCATEGORIZED = "미분류";
 const CATEGORY_POLL_MS = 2000;
 const CATEGORY_POLL_TRIES = 6; // 최대 12초쯤 기다려 본다
 
-export function SkillUsageChat({ skillId }: { skillId: string }) {
+export function SkillUsageChat({
+  skillId,
+  justCreated = false,
+}: {
+  skillId: string;
+  /**
+   * 스킬을 막 만들고 들어온 경우(크리에이터 게시 / 내 스킬 넣기).
+   * 만들던 화면으로 되돌아가는 건 의미가 없어서, 뒤로 가기를 대화창의 계층적 부모인
+   * 채팅 목록으로 보낸다 — 방금 만든 스킬이 목록 맨 위에 올라와 있다.
+   */
+  justCreated?: boolean;
+}) {
   const [skill, setSkill] = useState<SkillDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -147,7 +158,7 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-surface sm:h-[720px] sm:max-w-[390px] sm:rounded-[20px] sm:border sm:border-border sm:shadow-md">
       <header className="flex items-center gap-2 border-b border-border px-3 py-4">
-        <BackButton />
+        <BackButton to={justCreated ? "/chats" : undefined} />
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-sm">
           {emoji}
         </div>

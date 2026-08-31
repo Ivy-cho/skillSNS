@@ -32,7 +32,8 @@ export default function NewSkillPage() {
         description: prompt.trim().split("\n")[0].slice(0, 100),
       });
       // 등록 직후 바로 써볼 수 있게 그 스킬 대화 화면으로 보낸다.
-      router.replace(`/skill/${skill.id}`);
+      // from=create — 거기서 뒤로 가면 이 입력 화면이 아니라 채팅 목록으로 간다.
+      router.replace(`/skill/${skill.id}?from=create`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "스킬을 등록하지 못했어요");
       setSaving(false);

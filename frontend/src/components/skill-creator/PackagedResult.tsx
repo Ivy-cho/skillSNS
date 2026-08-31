@@ -73,7 +73,10 @@ export function PackagedResult({
           {zipping ? "묶는 중…" : "⬇ 패키지 저장 (.zip)"}
         </button>
         <Link
-          href={`/skill/${slug}`}
+          // replace: 게시가 끝난 크리에이터 화면은 히스토리에서 치운다 (뒤로 가도 안 돌아옴).
+          // from=create: 대화창 뒤로 가기를 채팅 목록으로 보내는 표시.
+          href={`/skill/${slug}?from=create`}
+          replace
           className="flex-1 rounded-full bg-primary px-3.5 py-2 text-center text-[0.82rem] font-semibold text-on-primary transition active:scale-[0.97]"
         >
           💬 내 스킬 사용해보기 →

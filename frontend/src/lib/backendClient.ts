@@ -193,6 +193,12 @@ export type ChatHistory = {
   messages: { role: "user" | "assistant"; content: string }[];
 };
 
+// 오프닝 턴(사용자가 아무것도 안 쳤는데 스킬이 먼저 자기소개하는 첫 턴)을 만들 때
+// 백엔드가 LLM에 넣어주는 가짜 사용자 메시지. LLM은 사람 발화가 있어야 답하는 구조라
+// 넣는 자리표시자인데, 대화 기록에 그대로 남아서 다시 들어오면 사용자가 친 말처럼 보인다.
+// (skill-service/app/api/routes/chat.py — human_content)
+const OPENING_PLACEHOLDER = "(대화 시작)";
+
 // 이 스킬과 나눈 가장 최근 대화 (채팅창 진입 시 이어보기용).
 // 이력이 없으면 본문이 null로 200이 온다 — 그때는 새 대화로 시작하면 된다.
 export async function getLatestChatSession(skillId: string): Promise<ChatHistory | null> {
@@ -203,7 +209,17 @@ export async function getLatestChatSession(skillId: string): Promise<ChatHistory
     // 로그인 전이거나 조회에 실패해도 대화 자체는 시작할 수 있어야 하니 새 대화로 본다.
     return null;
   }
-  return res.json();
+  const history: ChatHistory | null = await res.json();
+  if (!history) return null;
+
+  // 자리표시자는 화면에 보일 이유가 없으니 걷어낸다. 맨 앞의 사용자 메시지 하나만 —
+  // 뒤쪽에 같은 글자를 진짜로 친 경우까지 지우면 안 된다.
+  // (백엔드가 아예 안 내려주게 요청해뒀다: BACKEND_HANDOFF.md)
+  const [first] = history.messages;
+  if (first?.role === "user" && first.content.trim() === OPENING_PLACEHOLDER) {
+    return { ...history, messages: history.messages.slice(1) };
+  }
+  return history;
 }
 
 // 새 대화 시작. message를 생략하면 "오프닝 턴" — 스킬이 md_content를 근거로 자기소개와

@@ -3,6 +3,7 @@
 // ChatListItem이 비어있으면 알아서 숨긴다(마지막 메시지만 보여준다).
 
 import { listChatSessions } from "@/lib/backendClient";
+import { toPlainText } from "@/components/common/markdownText";
 import type { Conversation } from "./types";
 
 // ISO 시각 → "방금"/"3시간 전"/"어제"/"3일 전"/"1주 전" 같은 상대 표기.
@@ -28,7 +29,9 @@ export async function getChats(): Promise<Conversation[]> {
     skillName: s.skill_title,
     avatar: s.category_emoji ?? "🏷️",
     summary: "",
-    lastMessage: s.last_message,
+    // 에이전트 답변은 마크다운이라 그대로 두면 "# 제목 --- **[값]**"처럼 보인다.
+    // 목록에선 한 줄로 눌러 담아야 해서 기호를 벗긴다.
+    lastMessage: toPlainText(s.last_message),
     timeLabel: toTimeLabel(s.last_message_at),
   }));
 }

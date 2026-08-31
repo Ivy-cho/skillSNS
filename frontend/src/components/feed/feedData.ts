@@ -63,7 +63,43 @@ export function toFeedCard(item: FeedItem): FeedCard {
     qa: { q: "", a: "" },
     scrapCount: item.scrap_count,
     viewCount: item.view_count,
+    createdAt: item.created_at,
   };
+}
+
+// 피드 정렬 기준. 서버 GET /feed는 아직 created_at DESC 고정이라(정렬 파라미터 없음)
+// '최신순'만 서버 순서를 그대로 쓰고, 나머지는 프론트에서 다시 세운다.
+// (요청해둠: BACKEND_HANDOFF.md — ?sort=)
+export type SortKey = "recent" | "views" | "scraps";
+
+export const SORT_LABELS: Record<SortKey, string> = {
+  recent: "최신순",
+  views: "인기순",
+  scraps: "스크랩순",
+};
+
+// 동점이면 항상 이름 가나다순으로 떨어뜨려, 다시 그려도 순서가 흔들리지 않게 한다.
+export function sortCards(cards: FeedCard[], sort: SortKey): FeedCard[] {
+  const byName = (a: FeedCard, b: FeedCard) => a.title.localeCompare(b.title, "ko");
+  return [...cards].sort((a, b) => {
+    if (sort === "views") return b.viewCount - a.viewCount || byName(a, b);
+    if (sort === "scraps") return b.scrapCount - a.scrapCount || byName(a, b);
+    return b.createdAt.localeCompare(a.createdAt) || byName(a, b);
+  });
+}
+
+// 이미 정렬된 목록을 카테고리별로 담는다. 담는 순서를 그대로 두기 때문에
+// 섹션 순서도 정렬 기준을 따라간다 — 1등 카드가 속한 카테고리가 맨 위로 온다.
+export function groupByCategory(
+  sorted: FeedCard[]
+): { category: string; emoji: string; cards: FeedCard[] }[] {
+  const groups = new Map<string, { category: string; emoji: string; cards: FeedCard[] }>();
+  for (const card of sorted) {
+    const g = groups.get(card.categoryId);
+    if (g) g.cards.push(card);
+    else groups.set(card.categoryId, { category: card.categoryId, emoji: card.emoji, cards: [card] });
+  }
+  return [...groups.values()];
 }
 
 // 한 페이지에 받아올 개수. 백엔드 GET /feed의 limit 기본값과 같다.
@@ -88,4 +124,19 @@ export async function getFeedCards({
   if (!res.ok) throw new Error(`피드를 불러오지 못했어요 (${res.status})`);
   const items: FeedItem[] = await res.json();
   return { cards: items.map(toFeedCard), hasMore: items.length === limit };
+}
+
+// 정렬·카테고리별 보기는 "전체를 봐야" 맞는 답이 나온다 — 지금 화면에 불러온 몇 장만
+// 다시 세우면 틀린 순서가 된다. 그래서 그 두 모드에서만 페이지를 끝까지 당겨온다.
+// 서버가 정렬/그룹을 지원하면 이 함수는 사라진다(BACKEND_HANDOFF.md).
+const ALL_MAX_PAGES = 10; // 최대 200개까지만. 그 이상은 서버 지원 없이는 무리다.
+
+export async function getAllFeedCards(q = ""): Promise<FeedCard[]> {
+  const all: FeedCard[] = [];
+  for (let page = 0; page < ALL_MAX_PAGES; page += 1) {
+    const { cards, hasMore } = await getFeedCards({ q, offset: page * FEED_PAGE_SIZE });
+    all.push(...cards);
+    if (!hasMore) break;
+  }
+  return all;
 }

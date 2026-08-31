@@ -16,6 +16,7 @@ export type FeedCard = {
   qa: { q: string; a: string }; // 미리보기 Q&A
   scrapCount: number;
   viewCount: number; // 트렌딩 정렬 1순위(조회수)
+  createdAt: string; // ISO 문자열. 최신순 정렬에만 쓴다(화면에는 안 나온다)
 };
 
 export type TrendingItem = {

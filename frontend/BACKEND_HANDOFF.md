@@ -91,8 +91,27 @@ stage로 되돌림 → 그 stage의 **시작 상태**(안내/질문 메시지 �
   `u.avatar_url`을 하나 더 뽑아 `FeedItem.author_avatar_url: Optional[str]`로 내려주시면 됩니다.
   **프론트는 이미 `author_avatar_url`을 읽도록 붙여뒀습니다** — 필드가 오는 순간 사진이 뜨고,
   없으면 지금처럼 이름 축약으로 표시되니 배포 순서에 상관없이 안전합니다.
-- **피드 정렬 기준** — 피드를 무엇으로 채울지 정해야 합니다
-  (전체 스킬 최신순 / 인기순 / 나중에 팔로우 기반).
+- **피드 정렬 파라미터 `?sort=`** — 피드에 정렬 토글(최신순 / 인기순 / 스크랩순)과
+  카테고리별 묶어 보기를 붙였습니다. 그런데 `GET /feed`가 `ORDER BY s.created_at DESC` 고정이라,
+  최신순이 아닌 경우엔 **프론트가 페이지를 끝까지 다 받아온 뒤 다시 세우고 있습니다**
+  (`feedData.getAllFeedCards`, 상한 200개). 스킬이 늘면 못 버팁니다.
+  `?sort=recent|views|scraps`를 받아 `ORDER BY`만 바꿔주시면
+  (`s.created_at DESC` / `s.view_count DESC` / `scrap_count DESC`, 동점은 `s.title ASC`)
+  전부 무한스크롤로 되돌리겠습니다. 파라미터가 없으면 지금처럼 최신순이면 됩니다.
+- **카테고리 목록 API `GET /categories`와 `?category=`** — 위 "카테고리별 보기"를 칩 필터로
+  바꾸고 싶은데 두 가지가 없습니다.
+  1. **카테고리 목록** — 지금은 불러온 피드 카드에서 카테고리 이름을 긁어 쓰는 수밖에 없어서,
+     첫 페이지에 안 뜬 카테고리는 아예 보이지 않습니다. `GET /categories`로
+     `[{id, name, emoji, parent_id, skill_count}]`를 주시면 됩니다
+     (`skill-service/app/services/categories.py`에 이미 트리를 만드는 코드가 있습니다).
+  2. **대분류가 피드에 안 옵니다** — `FeedItem`에는 소분류(`category`)만 있어서 칩을 대분류로
+     묶을 수가 없습니다. 소분류는 LLM이 계속 만들어내서 금방 늘어납니다(현재 대분류 9 / 소분류 10).
+     `feed.py` 쿼리가 이미 부모를 `LEFT JOIN categories cm`으로 붙여두었으니
+     `cm.name`을 `major_category`로 하나 더 내려주시면 됩니다.
+  3. **정확 필터** — 칩을 붙이면 "그 카테고리만 보기"가 필요한데, 지금 쓸 수 있는 건
+     `?q=<카테고리명>`뿐입니다. ILIKE 부분일치라 제목·소개에 그 단어가 든 다른 카테고리 스킬까지
+     딸려옵니다. `?category=<id 또는 이름>`으로 정확히 거르게 해주시면 좋겠습니다.
+     (1~3이 오면 지금의 "카테고리별 묶어 보기"를 칩 필터로 바꾸겠습니다.)
 - **스킬 수정에서 카테고리도 바꾸게 해주세요** — `PATCH /skills/{id}`를 그대로 써서 스킬 수정
   화면(`/skill/[id]/edit`)을 붙였습니다. `title`·`description`·`md_content`는 잘 저장되는데
   `SkillUpdate` 스키마에 `category`가 없어서 보내도 조용히 무시됩니다. 그래서 지금 화면에서는

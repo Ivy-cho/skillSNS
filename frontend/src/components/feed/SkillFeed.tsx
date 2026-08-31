@@ -3,31 +3,50 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FeedCard } from "./FeedCard";
-import { getFeedCards, toTrending } from "./feedData";
+import {
+  getAllFeedCards,
+  getFeedCards,
+  groupByCategory,
+  SORT_LABELS,
+  sortCards,
+  toTrending,
+  type SortKey,
+} from "./feedData";
 import type { FeedCard as FeedCardData } from "./types";
 
 // 검색어를 칠 때마다 요청하지 않도록 잠깐 기다린다.
 const SEARCH_DEBOUNCE_MS = 300;
 
+const SORT_KEYS: SortKey[] = ["recent", "views", "scraps"];
+
 export function SkillFeed() {
   const [query, setQuery] = useState("");
   // 실제 요청에 쓰는 검색어 — query가 멈춘 뒤에야 따라온다.
   const [searchTerm, setSearchTerm] = useState("");
+  const [sort, setSort] = useState<SortKey>("recent");
+  const [grouped, setGrouped] = useState(false);
+
+  // 최신순 목록은 서버가 주는 순서 그대로라 한 페이지씩 받아도 맞다(무한스크롤 유지).
+  // 그 밖(인기순·스크랩순·카테고리별)은 전체를 봐야 순서가 맞아서 다 받아온다.
+  const needsAll = sort !== "recent" || grouped;
 
   // 결과를 "어느 검색어의 것인지"와 함께 들고 있는다. 이러면 검색어가 바뀐 순간을
   // 렌더 중에 알 수 있어서, 이펙트 안에서 목록을 비우는 setState를 하지 않아도 된다.
   // (cards === null = 아직 첫 페이지 로딩 중, [] = 로드 완료·결과 없음)
   const [result, setResult] = useState<{
-    term: string;
+    key: string;
     cards: FeedCardData[] | null;
     hasMore: boolean;
     error: string | null;
-  }>({ term: "", cards: null, hasMore: false, error: null });
+  }>({ key: "", cards: null, hasMore: false, error: null });
 
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // 검색어가 막 바뀌었으면 아직 옛 결과가 담겨 있으므로 로딩으로 취급한다.
-  const fresh = result.term === searchTerm;
+  // 무엇을 받아온 결과인지 = 검색어 + 받는 방식. 둘 중 하나만 바뀌어도 다시 받아야 한다.
+  const viewKey = `${needsAll ? "all" : "page"}::${searchTerm}`;
+
+  // 조건이 막 바뀌었으면 아직 옛 결과가 담겨 있으므로 로딩으로 취급한다.
+  const fresh = result.key === viewKey;
   const cards = fresh ? result.cards : null;
   const hasMore = fresh && result.hasMore;
   const loadError = fresh ? result.error : null;
@@ -57,17 +76,20 @@ export function SkillFeed() {
     };
   }, []);
 
-  // 검색어가 바뀌면 처음부터 다시 받는다.
+  // 검색어나 받는 방식이 바뀌면 처음부터 다시 받는다.
   useEffect(() => {
     let cancelled = false;
-    getFeedCards({ q: searchTerm })
+    const load = needsAll
+      ? getAllFeedCards(searchTerm).then((cards) => ({ cards, hasMore: false }))
+      : getFeedCards({ q: searchTerm });
+    load
       .then(({ cards, hasMore }) => {
-        if (!cancelled) setResult({ term: searchTerm, cards, hasMore, error: null });
+        if (!cancelled) setResult({ key: viewKey, cards, hasMore, error: null });
       })
       .catch(() => {
         if (cancelled) return;
         setResult({
-          term: searchTerm,
+          key: viewKey,
           cards: [],
           hasMore: false,
           error: "피드를 불러오지 못했어요. 잠시 후 다시 시도해주세요.",
@@ -76,7 +98,7 @@ export function SkillFeed() {
     return () => {
       cancelled = true;
     };
-  }, [searchTerm]);
+  }, [viewKey, searchTerm, needsAll]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || cards === null) return;
@@ -110,6 +132,10 @@ export function SkillFeed() {
 
   const trendingItems = toTrending(trending);
 
+  // 정렬·묶기는 받아온 목록에서 파생한다(추가 요청 없음).
+  const visible = cards === null ? null : sortCards(cards, sort);
+  const groups = visible && grouped ? groupByCategory(visible) : null;
+
   return (
     // 폰 프레임(테두리·높이·라운드)은 (main)/layout.tsx가 감싸주므로 여기선 내용만 채운다.
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
@@ -139,6 +165,40 @@ export function SkillFeed() {
               ✕
             </button>
           )}
+        </div>
+
+        {/* 정렬 · 카테고리별 보기. 최신순+목록(기본)일 때만 서버 순서를 그대로 쓰고,
+            나머지는 전체를 받아와 여기서 다시 세운다. */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+            {SORT_KEYS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSort(key)}
+                aria-pressed={sort === key}
+                className={`shrink-0 rounded-full border px-2.5 py-1 text-[0.68rem] font-medium transition active:scale-[0.97] motion-reduce:transition-none ${
+                  sort === key
+                    ? "border-primary bg-primary-tint text-ink"
+                    : "border-border bg-surface text-muted"
+                }`}
+              >
+                {SORT_LABELS[key]}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setGrouped((v) => !v)}
+            aria-pressed={grouped}
+            className={`shrink-0 rounded-full border px-2.5 py-1 text-[0.68rem] font-medium transition active:scale-[0.97] motion-reduce:transition-none ${
+              grouped
+                ? "border-primary bg-primary-tint text-ink"
+                : "border-border bg-surface text-muted"
+            }`}
+          >
+            카테고리별
+          </button>
         </div>
 
         {/* 요즘 뜨는 스킬 (가로 스크롤) — 조회수 상위 4개. 검색 중엔 결과에 집중하도록 감춘다. */}
@@ -175,7 +235,7 @@ export function SkillFeed() {
           <p className="shrink-0 py-8 text-center text-[0.78rem] text-muted">{loadError}</p>
         ) : cards === null ? (
           <p className="shrink-0 py-8 text-center text-[0.78rem] text-muted">불러오는 중…</p>
-        ) : cards.length === 0 ? (
+        ) : visible === null || visible.length === 0 ? (
           <p className="shrink-0 py-8 text-center text-[0.78rem] leading-relaxed text-muted">
             {searching ? (
               <>
@@ -189,9 +249,20 @@ export function SkillFeed() {
           </p>
         ) : (
           <>
-            {cards.map((card) => (
-              <FeedCard key={card.id} card={card} />
-            ))}
+            {groups
+              ? groups.map((g) => (
+                  <section key={g.category} className="flex shrink-0 flex-col gap-3">
+                    <h3 className="flex items-center gap-1.5 pt-1 text-[0.72rem] font-semibold text-muted">
+                      <span aria-hidden="true">{g.emoji}</span>
+                      {g.category}
+                      <span className="font-normal text-[0.66rem]">{g.cards.length}</span>
+                    </h3>
+                    {g.cards.map((card) => (
+                      <FeedCard key={card.id} card={card} />
+                    ))}
+                  </section>
+                ))
+              : visible.map((card) => <FeedCard key={card.id} card={card} />)}
             {/* 여기가 보이면 다음 페이지를 부른다 */}
             <div ref={sentinelRef} className="h-1 shrink-0" />
             {loadingMore && (

@@ -42,13 +42,13 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
   }
 
   // 스킬 정보와 "지난 대화"를 함께 불러온다.
-  // 프론트가 만드는 고정 인사말은 두지 않는다 — 어떤 스킬이든 똑같은 문구라 의미가 없고,
-  // 서버 이력에도 없어서 이어보기 때 따로 끼워 넣어야 했다. 첫 화면은 비워두고
-  // 사용자가 말을 걸면 그때부터 스킬이 답한다.
+  // 지난 대화가 있으면 그걸 복원하고, 없으면 message 없이 startChat을 호출해
+  // "오프닝 턴"(스킬이 스스로 소개하고 첫 질문을 던지는 응답)을 먼저 띄운다.
+  // 사용자가 뭐라도 쳐야 스킬이 입을 여는 상태를 없애기 위해서다.
   useEffect(() => {
     let cancelled = false;
     Promise.all([getSkill(skillId), getLatestChatSession(skillId)])
-      .then(([detail, history]) => {
+      .then(async ([detail, history]) => {
         if (cancelled) return;
         setSkill(detail);
 
@@ -62,6 +62,26 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
               content: m.content,
             }))
           );
+          return;
+        }
+
+        // 처음 들어온 대화 — 오프닝 턴을 받아온다. LLM 호출이라 잠깐 걸리니
+        // 그동안 입력 중 표시를 띄운다.
+        setIsTyping(true);
+        try {
+          const opening = await startChat(skillId);
+          if (cancelled) return;
+          sessionIdRef.current = opening.session_id;
+          setMessages([
+            { id: nextId(), role: "agent", kind: "text", content: opening.reply },
+          ]);
+        } catch (e) {
+          // 오프닝을 못 받아도 대화 자체는 할 수 있어야 하니 조용히 넘어간다.
+          if (!cancelled) {
+            setSendError(e instanceof Error ? e.message : "스킬 소개를 불러오지 못했어요");
+          }
+        } finally {
+          if (!cancelled) setIsTyping(false);
         }
       })
       .catch((e) => {

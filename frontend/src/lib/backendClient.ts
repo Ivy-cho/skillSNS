@@ -206,8 +206,11 @@ export async function getLatestChatSession(skillId: string): Promise<ChatHistory
   return res.json();
 }
 
-export function startChat(skillId: string, message: string) {
-  return postJSON<ChatResponse>(`/chat/${skillId}`, { message });
+// 새 대화 시작. message를 생략하면 "오프닝 턴" — 스킬이 md_content를 근거로 자기소개와
+// 첫 질문을 만들어 돌려준다. 오프닝 턴은 서버 기본 키로 처리돼 본인 키/무료 횟수를
+// 쓰지 않는다(소모는 사용자가 실제로 첫 메시지를 보내는 순간부터).
+export function startChat(skillId: string, message?: string) {
+  return postJSON<ChatResponse>(`/chat/${skillId}`, message ? { message } : {});
 }
 
 export function continueChat(skillId: string, sessionId: string, message: string) {

@@ -14,6 +14,13 @@ import {
 } from "@/lib/backendClient";
 import { BackButton } from "@/components/nav/BackButton";
 import { ScrapButton } from "./ScrapButton";
+import { CategoryChip } from "@/components/common/CategoryChip";
+
+// 서버가 아직 분류하지 못한 스킬의 카테고리 이름. "내 스킬 넣기"로 만들면 저장은 즉시
+// 끝나고 분류(LLM 호출)는 백그라운드에서 돌기 때문에, 만든 직후 잠깐 이 값이 보인다.
+const UNCATEGORIZED = "미분류";
+const CATEGORY_POLL_MS = 2000;
+const CATEGORY_POLL_TRIES = 6; // 최대 12초쯤 기다려 본다
 
 export function SkillUsageChat({ skillId }: { skillId: string }) {
   const [skill, setSkill] = useState<SkillDetail | null>(null);
@@ -65,6 +72,34 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
     };
   }, [skillId]);
 
+  // 방금 만든 스킬은 카테고리가 아직 안 붙어 있다(백그라운드 분류). 채워지면 헤더에
+  // 반영되도록 잠깐만 다시 물어본다 — 끝나면 스스로 멈춘다.
+  useEffect(() => {
+    if (!skill || (skill.category && skill.category !== UNCATEGORIZED)) return;
+    let alive = true;
+    let tries = 0;
+    const timer = setInterval(async () => {
+      if (++tries > CATEGORY_POLL_TRIES) {
+        clearInterval(timer);
+        return;
+      }
+      try {
+        const fresh = await getSkill(skillId);
+        if (!alive) return;
+        if (fresh.category && fresh.category !== UNCATEGORIZED) {
+          setSkill(fresh);
+          clearInterval(timer);
+        }
+      } catch {
+        // 한 번 실패해도 다음 차례에 다시 물어본다
+      }
+    }, CATEGORY_POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [skill, skillId]);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -101,6 +136,10 @@ export function SkillUsageChat({ skillId }: { skillId: string }) {
             {skill?.title ?? "스킬 불러오는 중…"}
           </div>
         </div>
+        {skill && (
+          // 이모지는 왼쪽 아바타에 이미 있으니 여기선 이름만 보여준다.
+          <CategoryChip name={skill.category} size="sm" showEmoji={false} />
+        )}
         {skill && <ScrapButton skillId={skill.id} />}
       </header>
 

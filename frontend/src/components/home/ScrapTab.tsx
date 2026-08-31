@@ -15,6 +15,7 @@ import {
 } from "@/lib/scrapStore";
 import { listSkills, type PublishedSkill } from "@/lib/backendClient";
 import { SwipeableRow } from "@/components/common/SwipeableRow";
+import { CategoryChip } from "@/components/common/CategoryChip";
 
 export function ScrapTab() {
   const folders = useSyncExternalStore(subscribeScraps, getFoldersSnapshot, getEmptyFolders);
@@ -95,8 +96,10 @@ export function ScrapTab() {
             >
               <Link
                 href={`/skill/${skill.id}`}
-                className="block rounded-2xl border border-border bg-surface p-3"
+                className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3"
               >
+                <CategoryChip name={skill.category} emoji={skill.category_emoji} />
+                <span className="min-w-0 flex-1">
                 <span className="block text-[0.85rem] font-semibold leading-snug text-ink">
                   {skill.title}
                 </span>
@@ -105,6 +108,7 @@ export function ScrapTab() {
                     {skill.description}
                   </span>
                 )}
+                </span>
               </Link>
             </SwipeableRow>
           ))

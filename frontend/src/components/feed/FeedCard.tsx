@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatCount, type FeedCard as FeedCardData } from "./types";
+import { CategoryChip } from "@/components/common/CategoryChip";
 
 // 피드 카드 1개. 카드 전체를 눌러 해당 스킬 채팅(/skill/{id})으로 이동한다.
 // shrink-0: 부모 스크롤 영역(flex-col, 고정 높이)에서 카드가 눌려 내용이 잘리지 않게 한다.
@@ -32,9 +33,12 @@ export function FeedCard({ card }: { card: FeedCardData }) {
               {formatCount(card.scrapCount)}
             </span>
           </div>
-          <span className="text-[0.82rem] font-semibold leading-snug text-ink">
-            {card.title}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="min-w-0 flex-1 truncate text-[0.82rem] font-semibold leading-snug text-ink">
+              {card.title}
+            </span>
+            <CategoryChip name={card.categoryId} emoji={card.emoji} size="sm" />
+          </div>
         </div>
       </div>
 

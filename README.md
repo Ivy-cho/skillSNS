@@ -8,7 +8,49 @@
   채팅 목록, BYOK)은 실 DB와 붙어 Render에 배포되어 동작하고, 프론트 연동까지 끝났다.
   진행 중인 요청은 [`frontend/FRONTEND_HANDOFF.md`](frontend/FRONTEND_HANDOFF.md)/
   [`frontend/BACKEND_HANDOFF.md`](frontend/BACKEND_HANDOFF.md)에 정리 중.
+- **바로 써보기: https://skillsns-frontend.onrender.com** — 카카오/구글로 로그인하면
+  스킬을 만들고 대화까지 해볼 수 있다. 대화·생성은 본인 Anthropic 키가 필요하지만,
+  키가 없어도 계정당 3회는 무료로 돌아간다. (Render 무료 플랜이라 15분 이상 유휴 상태면
+  첫 접속에 30~50초 콜드 스타트가 있다.)
 - 리포지토리: [Ivy-cho/skillSNS](https://github.com/Ivy-cho/skillSNS)
+
+---
+
+## 팀 / 참여자
+
+세 명이 함께 기획부터 배포까지 진행했다. 각자 역할은 나눠져 있었지만 셋 다 Claude Code로
+개발했기 때문에, `design.md`·`*_HANDOFF.md`·`docs/specs/` 같은 마크다운 문서로 서로의
+작업 영역을 최대한 갈라 충돌을 줄였고, 진행 상황과 시행착오를 문서로 계속 남기며
+개발했다 (이 README의 "구현 완료 요약"과 "트러블슈팅 기록"이 그 산물이다). 세 명 모두
+직접 테스터로도 참여해 로그인부터 스킬 생성·대화·피드까지 반복해서 돌려봤다.
+
+| 이름 | 역할 | GitHub |
+|---|---|---|
+| 윤에스더 | 총괄 기획 · 프롬프트 엔지니어링 · 테스트. 후반에 카테고리 택소노미로 기획을 바꾸면서 해당 백엔드까지 구현 | [@esthers2](https://github.com/esthers2) |
+| 최여림 | 기획 · 디자인 · 프론트엔드 · 테스트 | [@yeorimudaaa](https://github.com/yeorimudaaa) |
+| 조은비 | 백엔드 · 배포 · 테스트 | [@Ivy-cho](https://github.com/Ivy-cho) |
+
+---
+
+## 기능 설명
+
+사용자가 앱에서 실제로 하는 일들이다. (기술적인 동작 방식은 아래
+[2. 무엇을 만들었나](#2-무엇을-만들었나)부터.)
+
+- **내 노하우를 AI 스킬로 만들기** — 잘 아는 분야에 대해 AI가 던지는 질문에
+  답하다 보면, 그 노하우가 담긴 나만의 AI 챗봇("스킬")이 완성된다. 참고할 글 링크나
+  파일도 넣을 수 있다. AI가 알아서 만든 스킬을 테스트해보고 부족한 부분을 다듬어주며,
+  카테고리도 자동으로 붙는다. 중간에 마음에 안 들면 이전 단계로 되돌릴 수 있다.
+- **다른 사람의 스킬과 대화하기** — 남이 만들어 공개한 스킬을 골라 대화하면, 그 사람의
+  노하우를 바로 빌려 쓸 수 있다("면접 코치", "이직 자소서 첨삭러"처럼). 대화를 열면
+  스킬이 먼저 자기소개하고 질문을 건네고, 나갔다 다시 들어와도 대화가 이어진다.
+- **피드에서 스킬 둘러보기** — 공개된 스킬을 검색하고, 정렬을 바꾸거나 카테고리별로
+  묶어 보면서 훑는다. "요즘 뜨는 스킬"로 인기 있는 걸 바로 확인할 수 있다.
+- **스크랩** — 관심 가는 스킬을 폴더로 정리해 모아둔다.
+- **채팅 목록** — 대화해본 스킬을 최근 순으로 모아 보고, 눌러서 이어 대화한다.
+- **로그인 & 프로필** — 카카오/구글로 로그인하고, 닉네임·소개글·프로필 사진을 편집한다.
+- **내 키로 이용 (BYOK)** — 대화·생성에 드는 AI 비용은 각자 본인 Anthropic 키로 낸다.
+  키가 없어도 계정당 3회까지 무료로 체험해볼 수 있다.
 
 ---
 
@@ -48,11 +90,22 @@
 - [x] 피드 검색·페이징 프론트 연동 (300ms 디바운스 + 무한 스크롤)
 - [x] 채팅 이어보기 프론트 연동 (지난 대화 복원 + 인사말 유지)
 - [x] 마이페이지 프로필 사진·소개글 실제 값 반영
+- [x] 피드 응답에 작성자 프로필 사진 URL 추가
+
+### Phase 7 — 카테고리 자동 분류 + 대화 UX (2026.08.27 ~ 08.31)
+- [x] `categories` 정규화 테이블 도입 — 대분류/소분류를 한 테이블에 담는 자기참조 트리
+      (`parent_id`가 NULL이면 대분류). 이름 중복은 부분 유니크 인덱스로 막음
+- [x] 카테고리명 Agent — 사용자가 카테고리를 직접 고르는 단계를 없애고, 이름 확정 시점에
+      스킬 내용만 보고 대/소분류를 자동 분류 (재사용 우선 upsert, 실패해도 "미분류"로 저장)
+- [x] 홈 목록·피드 트렌딩·스킬 대화·스크랩·채팅 목록 카드에 카테고리 이모지 + 소분류 이름 표시
+- [x] 피드 정렬 옵션 + 카테고리별 묶어 보기
+- [x] 스킬 대화 진입 시 스킬이 스스로 소개하고 첫 질문을 던지는 오프닝 턴
+      (`POST /chat/{skill_id}`에서 `message` 생략 허용)
+- [x] 둘러보기에서 스킬을 누르면 새 대화로 열기, 채팅 목록 미리보기의 마크다운 기호 제거
 
 ### 진행 중 / 다음
-- [ ] 피드 응답에 작성자 프로필 사진 URL 추가 — `frontend/BACKEND_HANDOFF.md`
-- [ ] 스킬 수정 화면에서 카테고리 변경 가능하게 — `frontend/BACKEND_HANDOFF.md`
 - [ ] 계정 provider(구글/카카오) 간 통합 — 필요성 판단 후 보류 중
+- [ ] SQLAlchemy 커넥션 풀링 전환 (지금은 요청마다 새 커넥션 — 11.3절)
 
 ---
 
@@ -61,15 +114,22 @@
 | 항목 | 내용 |
 |---|---|
 | 프로젝트명 | skillSNS |
-| 상태 | 🚧 개발 진행중 (핵심 기능 구현 완료, 프론트 일부 연동 마무리 전) |
+| 상태 | 🚧 개발 진행중 (핵심 기능 + 프론트 연동 완료, 세부 개선 중) |
 | 목적 | Agent/Prompt 오케스트레이션을 활용한 Skill SNS 서비스 (포트폴리오용 토이 프로젝트) |
 | 아키텍처 | MSA — 독립 배포되는 백엔드 3개(user/skill/feed-service) + Next.js 프론트엔드 1개 |
 | 리포지토리 | [Ivy-cho/skillSNS](https://github.com/Ivy-cho/skillSNS) |
 | 브랜치 전략 | `backend`(백엔드 작업) / `frontend`(프론트 작업) / `develop`(통합, Render 배포 트리거) / `main`(프론트 배포 트리거, Vercel) |
-| 배포 | 4개 서비스 전부 Render 무료 플랜(Docker) |
+| 배포 | 4개 서비스 전부 Render 무료 플랜(Docker) — 프론트: <https://skillsns-frontend.onrender.com> |
 
-기술 선택 배경(왜 FastAPI인지, 왜 Supabase·Render인지, BYOK를 왜 이렇게 설계했는지 등)은
-[`docs/tech-decisions.md`](docs/tech-decisions.md)에 별도로 정리돼 있다.
+기술 선택 배경(왜 FastAPI인지, 왜 Supabase·Render인지, BYOK를 왜 이렇게 설계했는지,
+배포·CI/CD 파이프라인 등)은 [`docs/tech-decisions.md`](docs/tech-decisions.md)에 정리돼 있다.
+
+서비스별 **SW 구조 → DB 설계 → 핵심 기술 결정**은
+[`docs/architecture/`](docs/architecture/)에 서비스 단위로 나눠 정리했다:
+[user-service](docs/architecture/user-service.md) ·
+[skill-service](docs/architecture/skill-service.md) ·
+[feed-service](docs/architecture/feed-service.md) ·
+[frontend](docs/architecture/frontend.md).
 
 ---
 
@@ -83,12 +143,13 @@
 - **AI와 함께 스킬 만들기** — 주제 정하기 → 내용 정하기 → 이름 정하기 → 테스트 →
   개선 → 게시, 5단계 대화형 파이프라인. 사용자가 만든 스킬을 실제로 가동해 스스로
   질문·답변 테스트를 돌리고 객관적 기준으로 채점한 뒤, 부족하면 사용자 모르게
-  재작성까지 시도한다(`skill-service/app/agent/creator/`, LangGraph).
+  재작성까지 시도한다(`skill-service/app/agent/creator/`, LangGraph). 이름 확정 시점에
+  카테고리명 Agent가 스킬 내용을 보고 대/소분류를 자동으로 붙인다(사용자는 고르지 않는다).
 - **스킬과 대화하기** — 게시된 스킬의 시스템 프롬프트로 실제 LLM과 대화. 대화 세션은
   LangGraph의 Postgres 체크포인터에 저장되어 이어서 대화할 수 있다.
 - **피드** — 전체 공개 스킬을 최신순으로 보여주고, 제목·소개·작성자·카테고리로
-  DB 서버 사이드 검색(`ILIKE`) + `limit`/`offset` 무한 스크롤 페이징. 상단 "요즘 뜨는 스킬"은
-  조회수 기준(동률이면 이름순) 트렌딩.
+  DB 서버 사이드 검색(`ILIKE`) + `limit`/`offset` 무한 스크롤 페이징. 정렬 옵션과
+  카테고리별 묶어 보기를 지원하고, 상단 "요즘 뜨는 스킬"은 조회수 기준(동률이면 이름순) 트렌딩.
 - **스크랩 + 폴더** — 마음에 드는 스킬을 폴더별로 정리해서 담아둔다.
 - **채팅 목록** — 내가 대화해본 스킬들을 최근 대화순으로 모아보고, 다시 들어가면 이어서
   대화할 수 있다.
@@ -131,6 +192,10 @@ MSA로 나뉜 백엔드 3개가 프론트엔드 하나를 함께 지원한다. *
   테이블을 애플리케이션 코드로 참조·조인만 한다(자세한 내용은 2.3절).
 - **feed-service는 자기 테이블이 없다**: `skills`/`users`/`scraps`를 읽기 전용으로
   조인해서 보여주기만 하는, 3개 중 유일하게 "쓰기"가 없는 서비스다.
+- **카테고리는 정규화 테이블이다**: `skills.category`는 자유 텍스트가 아니라 `categories`
+  소분류 행의 id를 가리키는 FK다. 대분류/소분류는 `categories` 한 테이블에 자기참조
+  (`parent_id`)로 담기고, 표시용 이름·이모지는 feed/skill-service가 조인해 해석한다.
+  값을 채우는 건 카테고리명 Agent(2.1절) — 스킬 내용을 보고 자동 분류한다.
 
 | 서비스 | 포트 | 역할 |
 |---|---|---|
@@ -152,8 +217,8 @@ DB `FOREIGN KEY` 제약은 **같은 서비스가 소유한 테이블 사이에�
 │  id (PK)                 │    │   │  id (PK)                       │
 │  email, nickname         │    ├───┼─ user_id ─┘  (FK 없음, 값만 참조)│
 │  provider, provider_id   │    │   │  title, description, md_content│
-│  bio, avatar_url         │    │   │  category, view_count          │
-│  created_at, updated_at  │    │   │                                │
+│  bio, avatar_url         │    │   │  category (FK→categories.id)   │
+│  created_at, updated_at  │    │   │  view_count                    │
 │                          │    │   │ chat_sessions                  │
 │ refresh_tokens           │    │   │  id (PK)                       │
 │  id (PK)                 │    │   │  user_id ─┘                    │
@@ -183,6 +248,12 @@ DB `FOREIGN KEY` 제약은 **같은 서비스가 소유한 테이블 사이에�
                                     │  user_id (PK) ─┘                │
                                     │  anthropic_api_key_encrypted   │
                                     │  (BYOK, Fernet 암호화)          │
+                                    │                                │
+                                    │ categories                     │
+                                    │  id (PK)                       │
+                                    │  name, emoji                   │
+                                    │  parent_id (FK→categories.id)  │
+                                    │  NULL이면 대분류 / 값 있으면 소분류 │
                                     └────────────────────────────────┘
 
 + LangGraph checkpointer 테이블들 (skill-service, 자동 생성/관리)
@@ -193,7 +264,8 @@ DB `FOREIGN KEY` 제약은 **같은 서비스가 소유한 테이블 사이에�
 |---|---|---|---|
 | `users` | user-service | 계정 | `(provider, provider_id)`로 식별, provider 다르면 별개 계정 |
 | `refresh_tokens` | user-service | 리프레시 토큰 | 로그아웃 시 삭제, 1인 1토큰 |
-| `skills` | skill-service | 등록된 스킬 | `category`는 자유 텍스트(정규화 테이블 없음) |
+| `skills` | skill-service | 등록된 스킬 | `category`는 `categories` 소분류 행의 id (FK), 카테고리명 Agent가 채움 |
+| `categories` | skill-service | 카테고리 택소노미 | 대/소분류 자기참조 트리(`parent_id` NULL이면 대분류), 이름·이모지 포함. 재사용 우선 upsert |
 | `chat_sessions` | skill-service | 대화 세션 메타 | 실제 메시지 본문은 없음(체크포인터가 보관) |
 | `skill_drafts` | skill-service | 스킬 생성 진행 상태 | `skill_info` JSONB 하나에 5단계 결과 누적 |
 | `scrap_folders` / `scraps` | skill-service | 스크랩 | 유저-스킬 조합은 폴더 무관하게 유일 |
@@ -439,6 +511,18 @@ git push (backend / frontend / main 브랜치), 또는 위 4개 브랜치로의 
 
 ## 8. 테스트
 
+### 8.0 배포된 환경 (Render)
+
+| URL | 설명 |
+|---|---|
+| https://skillsns-frontend.onrender.com | 프론트엔드 — 실제 사용 화면 (로그인 후 스킬 생성·대화·피드) |
+| https://skillsns-user-service.onrender.com/docs | user-service Swagger |
+| https://skillsns-skill-service.onrender.com/docs | skill-service Swagger |
+| https://skillsns-feed-service.onrender.com/docs | feed-service Swagger |
+
+Render 무료 플랜이라 15분 이상 요청이 없으면 슬립 → 첫 요청에 30~50초 콜드 스타트가 있다
+(11절 주의사항). 아래 8.1~8.3은 로컬(`localhost`)에서 직접 띄웠을 때 기준이다.
+
 ### 8.1 테스트 UI (브라우저)
 
 | URL | 설명 |
@@ -481,18 +565,19 @@ GET    /skills/{id}                   # 스킬 상세
 PATCH  /skills/{id}                   # 스킬 수정 (본인만)
 DELETE /skills/{id}                   # 스킬 삭제 (본인만)
 GET    /skills/{id}/download          # MD 파일 다운로드
-POST   /chat/{skill_id}               # 새 대화 시작
+POST   /chat/{skill_id}               # 새 대화 시작 (message 생략 시 스킬이 먼저 인사·질문하는 오프닝 턴)
 POST   /chat/{skill_id}/{session_id}  # 대화 이어가기
 GET    /chat/{skill_id}/{session_id}  # 대화 기록 조회
 GET    /chat/{skill_id}/latest        # 이 스킬의 최근 세션 이어보기 (없으면 null)
 GET    /chat/sessions                 # 내 대화 목록 (채팅 목록 화면)
 
-POST   /skills/create                       # 스킬 만들기 시작 (카테고리 선택)
+POST   /skills/create                       # 스킬 만들기 시작
 POST   /skills/create/{draft_id}            # 대화 이어가기 (메시지/링크/파일)
 POST   /skills/create/{draft_id}/improve    # 테스트 결과 보고 개선 시작
 POST   /skills/create/{draft_id}/retest     # 개선 후 재테스트
 GET    /skills/create/{draft_id}            # 진행 상황 조회
-POST   /skills/create/{draft_id}/confirm    # 확정 → 실제 스킬 등록
+POST   /skills/create/{draft_id}/confirm    # 확정 → 실제 스킬 등록 (카테고리 자동 분류)
+POST   /skills/create/{draft_id}/revert     # 직전 단계로 되돌리기
 ```
 
 **scrap** (skill-service, prefix `/scrap`)
@@ -561,9 +646,9 @@ npm install
 npm run dev
 ```
 
-`http://localhost:3000`에서 카카오/구글로 로그인 → 카테고리 선택 → 스킬 내용 채우기 →
-이름 정하기 → 테스트(3분 정도 소요) → 게시까지 눌러보면 된다. 자세한
-체크리스트·트러블슈팅은 [`docs/frontend-integration.md`](docs/frontend-integration.md).
+`http://localhost:3000`에서 카카오/구글로 로그인 → 스킬 주제 정하기 → 내용 채우기 →
+이름 정하기(이때 카테고리 자동 분류) → 테스트(3분 정도 소요) → 게시까지 눌러보면 된다.
+자세한 체크리스트·트러블슈팅은 [`docs/frontend-integration.md`](docs/frontend-integration.md).
 
 ---
 
@@ -586,6 +671,12 @@ npm run dev
 - **스킬 생성 파이프라인은 호출 하나 = 단계 하나** — 여러 단계를 한 요청에 자동으로
   묶지 않는다. 중간에 실패해도 "어디까지 반영됐는지"가 항상 명확해야 해서다
   (`docs/specs/skill-service.md` 4-1절).
+- **카테고리는 사람이 아니라 Agent가 정한다** — 초기엔 사용자가 대화로 카테고리를
+  고르게 했다가, "새 라벨 만들기"보다 "비슷한 스킬이 모일 자리 찾기"가 목표라는 판단으로
+  기획을 바꿨다. 이름 확정 시점에 카테고리명 Agent가 스킬 내용만 보고 대/소분류를 붙이되,
+  기존 `categories` 트리를 먼저 재사용하고 없을 때만 새로 만든다(`upsert_category`).
+  분류가 실패하거나 키가 없어도 스킬은 "미분류"로 반드시 저장된다
+  (`skill-service/app/agent/category_classifier.py`, `app/services/categories.py`).
 
 ---
 

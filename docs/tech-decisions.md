@@ -170,3 +170,100 @@
 - 채팅(`/chat/*`)·스킬 생성(`/skills/create/*`) 모두 호출 직전에 로그인 유저 본인 키를
   조회해서 씀. 키가 없으면 LLM을 호출하지 않고 등록 안내 메시지/에러를 즉시 반환한다 —
   서버 공용 키로 조용히 폴백하지 않는다.
+- 예외로, 본인 키가 없는 사람도 **계정당 평생 3회**(`FREE_TRIAL_LIMIT`, 생성·대화 합산)는
+  서버 기본 키로 무료 체험할 수 있다. 처음부터 자기 키를 넣으라고 하면 아예 안 써보고
+  이탈하는 경우가 많아 만든 트라이얼. 채팅창을 막 연 "오프닝 턴"은 이 카운트를 소모하지
+  않는다(항상 서버 기본 키).
+
+---
+
+## 9. 배포 & CI/CD 파이프라인
+
+### 9.1 결정 요약
+
+| 항목 | 선택 | 이유 |
+|---|---|---|
+| 배포 플랫폼 | **Render** (4개 서비스 전부) | 무료 티어에서 웹서비스 여러 개 독립 배포 → MSA에 적합. Dockerfile 그대로 사용 |
+| 빌드 방식 | `env: docker` — 각 서비스 디렉토리의 `Dockerfile`로 이미지 빌드 후 컨테이너 실행 | Render 네이티브 빌드팩이 아니라 우리가 관리하는 Dockerfile을 그대로 씀(로컬 docker-compose와 동일 이미지) |
+| 서비스 정의 | `render.yaml` Blueprint (New → Blueprint) | 4개 서비스(user/skill/feed-service + frontend)를 한 파일로 선언 |
+| 배포 트리거 | `autoDeploy: false` + **GitHub Actions가 Deploy Hook 호출** | Render 자체 auto-deploy 대신, lint를 통과했을 때만 배포되게 하려고 |
+| CI | GitHub Actions — `ruff`(백엔드) + `tsc`/`eslint`(프론트) | 배포 전 정적 검사 |
+| DB | 별도 배포 없음 — Supabase 클라우드에 직접 연결 | 4절/3절 |
+
+### 9.2 `render.yaml` (Blueprint)
+
+- 서비스 4개 모두 `type: web`, `env: docker`, `region: singapore`, `plan: free`,
+  `branch: develop`, `autoDeploy: false`.
+- `healthCheckPath`: 백엔드는 `/health`, 프론트는 `/`.
+- 환경변수 두 종류:
+  - `value:`가 박힌 것 — `CORS_ORIGINS`(양쪽 배포 도메인), 프론트의 `NEXT_PUBLIC_*`
+    (백엔드 서비스들의 `.onrender.com` URL), `JWT_ALGORITHM`, 토큰 수명, `ANTHROPIC_MODEL`.
+    서비스 이름을 `render.yaml` 그대로 뒀다면 손댈 필요 없음.
+  - `sync: false` — `SUPABASE_*`, `DATABASE_URL`, `JWT_SECRET_KEY`, `ANTHROPIC_API_KEY`,
+    `SECRET_ENCRYPTION_KEY`, `CALLBACK_URL`. Render 대시보드에서 직접 입력(비밀값).
+- **`region: singapore`**: Render 기본 리전(미국)과 Supabase DB 리전(서울)이 멀어
+  요청마다 리전 간 왕복이 생기던 것을 완화 — 서울에 가장 가까운 Render 리전으로 지정.
+
+### 9.3 GitHub Actions — 워크플로 2개
+
+| 파일 | 트리거 | 하는 일 |
+|---|---|---|
+| `.github/workflows/deploy.yml` | `push` → `develop` | ① `lint-backend`(ruff, user/skill/feed 한꺼번에) ② `lint-frontend`(`npm ci` → `tsc --noEmit` → `eslint src`) ③ 둘 다 통과 시 `deploy` 잡이 Deploy Hook 4개를 `curl -f`로 순차 호출 |
+| `.github/workflows/ci.yml` | `push` → `backend`/`frontend`/`main`, 또는 `backend`/`develop`/`frontend`/`main`으로의 `pull_request` | deploy.yml과 **같은 lint만** 돌리고 배포는 안 함. 머지 전에 문제를 미리 잡는 용도. (`develop` 직접 push는 deploy.yml이 이미 같은 검사를 하므로 ci.yml의 push 트리거에서 제외 — 중복 실행 방지) |
+
+- **lint 버전 고정**: `pip install ruff==0.15.22`. 버전을 안 박았을 때 실행 시점마다
+  다른 ruff가 깔리며 기본 규칙셋이 달라져 CI가 들쭉날쭉 실패한 이력이 있다(README 11.6절).
+- **`deploy` 잡의 Deploy Hook URL**은 GitHub Secrets에 저장:
+  `RENDER_DEPLOY_HOOK_USER_SERVICE` / `_SKILL_SERVICE` / `_FEED_SERVICE` / `_FRONTEND`.
+
+### 9.4 배포 흐름
+
+```
+git push origin develop
+  └─ GitHub Actions: deploy.yml
+       ├─ lint-backend   (ruff user-service/ skill-service/ feed-service/)  ─┐
+       ├─ lint-frontend  (tsc --noEmit + eslint src)                        ─┴ 하나라도 실패 → 배포 중단
+       └─ deploy: needs [lint-backend, lint-frontend]
+            curl -f $RENDER_DEPLOY_HOOK_USER_SERVICE
+            curl -f $RENDER_DEPLOY_HOOK_SKILL_SERVICE
+            curl -f $RENDER_DEPLOY_HOOK_FEED_SERVICE
+            curl -f $RENDER_DEPLOY_HOOK_FRONTEND
+          → 각 Render 서비스가 자기 Dockerfile로 빌드·기동
+
+git push origin backend | frontend | main   (또는 이 브랜치들로의 PR)
+  └─ GitHub Actions: ci.yml  — 같은 lint만, 배포 없음
+```
+
+브랜치 전략: `backend`/`frontend`에서 작업 → `develop`에 통합(= 배포) →
+`main`은 프론트(Vercel 병행 배포용) 및 안정 스냅샷.
+
+### 9.5 배포 환경 특성 / 알려진 함정
+
+- **콜드 스타트**: Render 무료 플랜은 15분 이상 요청이 없으면 슬립. 첫 요청에 30–50초
+  (4개 서비스 각각). 포트폴리오 용도로는 허용.
+- **Next standalone 502**: 프론트 Dockerfile runner에 `ENV HOSTNAME="0.0.0.0"`가 없으면
+  Render 프록시 네트워킹에서 502. (README 11.1절)
+- **서비스 이름/서브도메인 재사용**: 삭제한 서비스 이름을 Render가 바로 안 풀어줘서
+  재생성 시 임의 접미사가 붙을 수 있다. `render.yaml`의 `name`/`region` 등 정체성
+  필드는 이미 존재하는 서비스에 대해 건드리지 않고, 배포는 Deploy Hook에만 의존한다.
+  (README 11.2절)
+- **`sync: false` 값 재입력 누락**: Blueprint를 재적용하면 비밀 환경변수는 안 옮겨지므로
+  전부 다시 넣어야 한다(feed-service가 `DATABASE_URL` 누락으로 기동 실패한 이력 — README 11.7절).
+- **환경변수에 개행 혼입**: `.env`에서 값을 복사할 때 줄바꿈까지 딸려 들어가
+  `database "postgres\n" does not exist`로 죽은 이력(README 11.5절). 값 끝 공백/개행 제거.
+- **응답 지연**: 위 `region: singapore`로 리전 간 왕복은 완화. SQLAlchemy가 `NullPool`
+  이라 요청마다 커넥션을 새로 맺는 비용은 남아 있다 — 커넥션 풀링 전환이 다음 개선 후보
+  (README 11.3절).
+
+### 9.6 배포 URL
+
+| 서비스 | URL |
+|---|---|
+| frontend | <https://skillsns-frontend.onrender.com> |
+| user-service | <https://skillsns-user-service.onrender.com> (`/docs`) |
+| skill-service | <https://skillsns-skill-service.onrender.com> (`/docs`) |
+| feed-service | <https://skillsns-feed-service.onrender.com> (`/docs`) |
+
+> 프론트를 Vercel로 병행 배포하는 경우: `render.yaml`에서 `skillsns-frontend`만 빼고
+> 백엔드 3개는 그대로. Vercel은 Dockerfile 대신 Next를 직접 빌드하고 `main` push 시
+> 자동 배포한다. 백엔드 `CORS_ORIGINS`에 Vercel 도메인이 이미 포함돼 있다.

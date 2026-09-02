@@ -42,35 +42,45 @@ feed-service/
 ```
 id, title, description,
 category (소분류 이름), category_emoji,
+major_category (대분류 이름, 백필 전 라벨이면 null),
 user_id, author_nickname, author_avatar_url,
 scrap_count, view_count, created_at
 ```
 
 ### 쿼리 (`app/api/routes/feed.py`)
 
-`GET /feed?q=&limit=20&offset=0` — `q` 유무에 따라 쿼리 2개를 나눠 쓴다.
+`GET /feed?q=&sort=recent&category=&limit=20&offset=0` — 고정 `SELECT ... FROM ... JOIN`
+(`_SELECT_FROM`)에 `WHERE`/`ORDER BY`를 파라미터에 따라 조립해 붙인다.
+사용자 입력은 전부 바인드 파라미터이고, `sort`만 화이트리스트(`_SORT_ORDER`) 키로 매핑한다.
 
 ```sql
 FROM skills s
 LEFT JOIN users u        ON u.id = s.user_id            -- 작성자 닉네임·프로필 사진
 LEFT JOIN categories c    ON c.id = s.category           -- 소분류 이름·이모지 해석
-LEFT JOIN categories cm   ON cm.id = c.parent_id         -- (검색 시) 대분류 이름
+LEFT JOIN categories cm   ON cm.id = c.parent_id         -- 대분류 이름(major_category), 검색·필터
 LEFT JOIN (SELECT skill_id, COUNT(*) cnt FROM scraps GROUP BY skill_id) sc
                          ON sc.skill_id = s.id           -- 스크랩 수
-ORDER BY s.created_at DESC
+[ WHERE <q 조건> [AND <category 조건>] ]
+ORDER BY <sort>
 LIMIT :limit OFFSET :offset
 ```
 
 - **`COALESCE(c.name, s.category)`** / **`COALESCE(c.emoji, '🏷️')`** — `s.category`는
   `categories.id`지만, 아직 id로 백필되지 않은(라벨 문자열) 옛 스킬은 조인이 안 맞으므로
-  원본 값을 그대로 보여준다.
-- **검색(`q`)**: `title` / `description` / 소분류 이름(`c.name`) / 대분류 이름(`cm.name`) /
-  원본 라벨(`s.category`) / 작성자 닉네임(`u.nickname`)에 대해 대소문자 무시 부분일치
-  (`ILIKE '%q%'`).
-- **페이징**: `offset`/`limit`. 응답 배열 길이가 `limit`보다 작으면 마지막 페이지.
-  프론트는 300ms 디바운스 + 무한 스크롤로 이 엔드포인트를 호출한다.
-- 정렬은 항상 `created_at DESC`(최신순). "요즘 뜨는 스킬"(조회수 트렌딩)과 피드 내
-  정렬 옵션·카테고리 그룹은 이 응답을 받은 **프론트가 가공**한다(서버는 최신순 하나만 제공).
+  원본 값을 그대로 보여준다. `major_category`는 `cm.name`(대분류) — 백필 전 스킬이면 `null`.
+- **검색 `q`**: `title` / `description` / 소분류(`c.name`) / 대분류(`cm.name`) /
+  원본 라벨(`s.category`) / 작성자 닉네임(`u.nickname`)에 대소문자 무시 부분일치(`ILIKE '%q%'`).
+- **정렬 `sort`**: `recent`(기본, `s.created_at DESC`) / `views`(`s.view_count DESC`, 동점
+  `s.title ASC`) / `scraps`(`COALESCE(sc.cnt,0) DESC`, 동점 `s.title ASC`). 화이트리스트
+  밖이면 `400 INVALID_SORT`.
+- **필터 `category`**: 소분류 id **또는** 소분류/대분류 이름으로 **정확일치**
+  (`s.category = :cat OR c.name = :cat OR cm.name = :cat`) — `q`의 부분일치와 달리 다른
+  카테고리 스킬이 안 딸려온다. `q`와 병행 가능.
+- **페이징**: `offset`/`limit`. 응답 배열 길이 < `limit`이면 마지막 페이지. 프론트는
+  300ms 디바운스 + 무한 스크롤.
+- "요즘 뜨는 스킬" 트렌딩은 여전히 프론트가 이 응답을 가공해 만든다(전용 엔드포인트 없음).
+- 아직 없는 것: `GET /categories`(카테고리 트리 목록) — skill-service 쪽 숙제
+  (`frontend/BACKEND_HANDOFF.md`).
 
 ---
 

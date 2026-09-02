@@ -601,9 +601,12 @@ DELETE /me/anthropic-key    # 삭제
 
 **feed-service**
 ```
-GET /feed?q=&limit=20&offset=0    # 스킬 피드 (작성자 닉네임·스크랩 수 포함)
-                                   # q: 제목/소개/카테고리/작성자 닉네임 ILIKE 검색 (생략 가능)
-                                   # limit/offset: 페이징 (기본 20/0, 응답 길이<limit이면 마지막 페이지)
+GET /feed?q=&sort=recent&category=&limit=20&offset=0
+      # 스킬 피드 (작성자 닉네임·프로필 사진·스크랩 수·대분류 이름 포함)
+      # q:        제목/소개/소분류/대분류/작성자 닉네임 ILIKE 검색 (생략 가능)
+      # sort:     recent(기본) | views | scraps  — 그 외 값은 400
+      # category: 소분류 id 또는 소분류/대분류 이름으로 정확일치 필터 (생략 가능, q와 병행 가능)
+      # limit/offset: 페이징 (기본 20/0, 응답 길이<limit이면 마지막 페이지)
 ```
 
 자세한 요청/응답 형식은 `docs/specs/skill-service.md` 참고.

@@ -83,35 +83,23 @@ stage로 되돌림 → 그 stage의 **시작 상태**(안내/질문 메시지 �
 
 - **파일 첨부** — `AttachModal`에서 고른 파일이 `continueDraft`로 전송되고 백엔드가 텍스트를
   추출하지만, 첨부 UX(진행 표시, 실패 처리)는 다듬을 여지가 있습니다.
-- **피드에 작성자 프로필 사진을 같이 내려주세요** — 스킬 피드 카드의 원형 아바타에 작성자가
-  등록한 프로필 사진을 보여주려 합니다. 지금은 `GET /feed`의 `FeedItem`에 `author_nickname`만
-  있어서 이름 축약(예: "조은")으로 대체하고 있습니다. user-service에는 남의 프로필을 조회하는
-  공개 엔드포인트가 없어서 프론트에서 따로 가져올 방법이 없습니다.
-  `feed-service/app/api/routes/feed.py`의 쿼리가 이미 `LEFT JOIN users u`를 하고 있으니,
-  `u.avatar_url`을 하나 더 뽑아 `FeedItem.author_avatar_url: Optional[str]`로 내려주시면 됩니다.
-  **프론트는 이미 `author_avatar_url`을 읽도록 붙여뒀습니다** — 필드가 오는 순간 사진이 뜨고,
-  없으면 지금처럼 이름 축약으로 표시되니 배포 순서에 상관없이 안전합니다.
-- **피드 정렬 파라미터 `?sort=`** — 피드에 정렬 토글(최신순 / 인기순 / 스크랩순)과
-  카테고리별 묶어 보기를 붙였습니다. 그런데 `GET /feed`가 `ORDER BY s.created_at DESC` 고정이라,
-  최신순이 아닌 경우엔 **프론트가 페이지를 끝까지 다 받아온 뒤 다시 세우고 있습니다**
-  (`feedData.getAllFeedCards`, 상한 200개). 스킬이 늘면 못 버팁니다.
-  `?sort=recent|views|scraps`를 받아 `ORDER BY`만 바꿔주시면
-  (`s.created_at DESC` / `s.view_count DESC` / `scrap_count DESC`, 동점은 `s.title ASC`)
-  전부 무한스크롤로 되돌리겠습니다. 파라미터가 없으면 지금처럼 최신순이면 됩니다.
-- **카테고리 목록 API `GET /categories`와 `?category=`** — 위 "카테고리별 보기"를 칩 필터로
-  바꾸고 싶은데 두 가지가 없습니다.
-  1. **카테고리 목록** — 지금은 불러온 피드 카드에서 카테고리 이름을 긁어 쓰는 수밖에 없어서,
-     첫 페이지에 안 뜬 카테고리는 아예 보이지 않습니다. `GET /categories`로
-     `[{id, name, emoji, parent_id, skill_count}]`를 주시면 됩니다
-     (`skill-service/app/services/categories.py`에 이미 트리를 만드는 코드가 있습니다).
-  2. **대분류가 피드에 안 옵니다** — `FeedItem`에는 소분류(`category`)만 있어서 칩을 대분류로
-     묶을 수가 없습니다. 소분류는 LLM이 계속 만들어내서 금방 늘어납니다(현재 대분류 9 / 소분류 10).
-     `feed.py` 쿼리가 이미 부모를 `LEFT JOIN categories cm`으로 붙여두었으니
-     `cm.name`을 `major_category`로 하나 더 내려주시면 됩니다.
-  3. **정확 필터** — 칩을 붙이면 "그 카테고리만 보기"가 필요한데, 지금 쓸 수 있는 건
-     `?q=<카테고리명>`뿐입니다. ILIKE 부분일치라 제목·소개에 그 단어가 든 다른 카테고리 스킬까지
-     딸려옵니다. `?category=<id 또는 이름>`으로 정확히 거르게 해주시면 좋겠습니다.
-     (1~3이 오면 지금의 "카테고리별 묶어 보기"를 칩 필터로 바꾸겠습니다.)
+- ✅ **피드에 작성자 프로필 사진** (구현됨) — `feed.py` 쿼리가 `u.avatar_url AS author_avatar_url`을
+  내려주고, `FeedItem.author_avatar_url: Optional[str]`로 응답에 포함됩니다. 프론트는 이미
+  이 필드를 읽고 있어 그대로 사진이 뜹니다.
+- ✅ **피드 정렬 파라미터 `?sort=`** (구현됨) — `GET /feed?sort=recent|views|scraps`.
+  `recent`(기본, `s.created_at DESC`) / `views`(`s.view_count DESC`, 동점 `s.title ASC`) /
+  `scraps`(`scrap_count DESC`, 동점 `s.title ASC`). 화이트리스트 밖 값은 `400 INVALID_SORT`.
+  파라미터 없으면 기존과 동일(최신순). → 프론트의 "다 받아 재정렬"을 무한스크롤로 되돌릴 수 있음.
+- **카테고리 목록 API `GET /categories`** — 🔴 아직. 피드 카드에서 카테고리 이름을 긁는
+  방식이라 첫 페이지에 안 뜬 카테고리는 안 보입니다. skill-service에 `GET /categories`로
+  `[{id, name, emoji, parent_id, skill_count}]` 트리를 주세요
+  (`skill-service/app/services/categories.py`에 트리 코드가 이미 있습니다). ← **남은 숙제**
+  - ✅ **대분류가 피드에 안 옴** (구현됨) — `FeedItem.major_category: Optional[str]`로 소분류의
+    부모(대분류) 이름을 함께 내려줍니다. 백필 안 된 라벨 스킬이면 `null`.
+  - ✅ **정확 필터** (구현됨) — `GET /feed?category=<소분류 id | 소분류 이름 | 대분류 이름>`.
+    ILIKE 부분일치가 아니라 정확일치(`s.category = :cat OR c.name = :cat OR cm.name = :cat`)라
+    제목·소개에 그 단어가 든 다른 카테고리 스킬이 안 딸려옵니다. `?q=`와 병행 가능.
+    → `GET /categories`만 오면 "카테고리별 묶어 보기"를 칩 필터로 전환 가능.
 - **오프닝 턴 자리표시자 `(대화 시작)`를 이력에서 빼주세요** — 오프닝 턴을 만들 때
   `chat.py`가 LLM에 넣는 가짜 사용자 발화(`human_content = "(대화 시작)"`)가 대화 기록에
   그대로 남습니다. 그래서 대화창을 나갔다 다시 들어오면 `GET /chat/{skill}/latest`의 첫

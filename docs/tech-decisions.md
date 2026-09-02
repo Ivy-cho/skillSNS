@@ -251,9 +251,13 @@ git push origin backend | frontend | main   (또는 이 브랜치들로의 PR)
   전부 다시 넣어야 한다(feed-service가 `DATABASE_URL` 누락으로 기동 실패한 이력 — README 11.7절).
 - **환경변수에 개행 혼입**: `.env`에서 값을 복사할 때 줄바꿈까지 딸려 들어가
   `database "postgres\n" does not exist`로 죽은 이력(README 11.5절). 값 끝 공백/개행 제거.
-- **응답 지연**: 위 `region: singapore`로 리전 간 왕복은 완화. SQLAlchemy가 `NullPool`
-  이라 요청마다 커넥션을 새로 맺는 비용은 남아 있다 — 커넥션 풀링 전환이 다음 개선 후보
-  (README 11.3절).
+- **응답 지연**: 두 원인을 모두 처리했다. ① 리전 간 왕복은 `region: singapore`로 완화.
+  ② SQLAlchemy 엔진을 `NullPool` → `AsyncAdaptedQueuePool`(`pool_size=5`, `max_overflow=5`,
+  `pool_pre_ping=True`, `pool_recycle=300`)로 전환해 요청마다 붙던 TCP/TLS 핸드셰이크 비용을
+  없앴다. PgBouncer 호환 `connect_args`(익명 prepared statement)는 유지하고, PgBouncer가
+  끊는 유휴 커넥션은 `pool_pre_ping`이 체크아웃 시 걸러낸다. 세 백엔드(user/skill/feed)
+  모두 동일. (대화·스킬 생성이 쓰는 LangGraph 체크포인터는 이 엔진과 별개로 psycopg 풀을
+  이미 쓰고 있었다 — 9.5의 502 항목과 무관.)
 
 ### 9.6 배포 URL
 

@@ -18,7 +18,7 @@ feed-service/
 ├── requirements.txt        # fastapi, uvicorn, sqlalchemy, asyncpg, pydantic-settings (LLM/PIL/jose 전부 불필요)
 └── app/
     ├── core/config.py      # Settings: DATABASE_URL, CORS_ORIGINS 뿐
-    ├── db/database.py      # async engine(NullPool) + get_db.  ★ Base / create_all 없음 (스키마를 만들지 않는다)
+    ├── db/database.py      # async engine(작은 커넥션 풀 + PgBouncer 호환) + get_db.  ★ Base / create_all 없음
     ├── schemas/feed.py     # FeedItem (응답 모델)
     └── api/routes/feed.py  # GET /feed — raw SQL 2개(일반/검색) + 핸들러
 ```

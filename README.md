@@ -103,9 +103,18 @@
       (`POST /chat/{skill_id}`에서 `message` 생략 허용)
 - [x] 둘러보기에서 스킬을 누르면 새 대화로 열기, 채팅 목록 미리보기의 마크다운 기호 제거
 
+### Phase 8 — 백엔드 핸드오프 정리 (2026.09.02)
+- [x] `GET /feed`에 `?sort=recent|views|scraps` + `?category=`(정확일치 필터) + 응답에
+      `major_category`(대분류 이름) 추가 — 프론트 전체 페이지 재정렬을 서버 정렬로 대체
+- [x] `GET /categories` — 카테고리 택소노미 목록(`skill_count` 포함, 공개), 칩 필터용
+- [x] 오프닝 턴 자리표시자(`(대화 시작)`)를 대화 이력 응답에서 서버가 제외
+      (`chat_sessions.started_with_opening`), 오프닝만 있는 빈 세션은 채팅 목록에서 감춤
+- [x] 스킬 테스트 리포트 완전성 보장 — 채점 결과 검증 후 재요청, 그래도 빠지면 실측치로 메움
+- [x] SQLAlchemy 엔진을 `NullPool` → 커넥션 풀(`AsyncAdaptedQueuePool`, `pool_pre_ping`
+      + `pool_recycle=300`)로 전환 — 요청마다 붙던 TCP/TLS 핸드셰이크 제거 (11.3절 ②)
+
 ### 진행 중 / 다음
 - [ ] 계정 provider(구글/카카오) 간 통합 — 필요성 판단 후 보류 중
-- [ ] SQLAlchemy 커넥션 풀링 전환 (지금은 요청마다 새 커넥션 — 11.3절)
 
 ---
 
@@ -713,10 +722,14 @@ npm run dev
   `ap-northeast-2`)이 멀어서 요청마다 리전 간 왕복이 발생. ② SQLAlchemy 엔진이
   `NullPool`이라 요청마다 DB 커넥션을 새로 맺고 끊음 — 커넥션 풀링이 없어 매번 TCP/TLS
   핸드셰이크 비용을 지불.
-- **해결**: `render.yaml`에 `region: singapore` 추가(서울에 가장 가까운 Render 리전)로
-  ①은 완화. ②(풀링 전환)는 아직 미착수 — 다음 개선 후보.
+- **해결**: ① `render.yaml`에 `region: singapore` 추가(서울에 가장 가까운 Render 리전)로
+  완화. ② SQLAlchemy 엔진을 `NullPool` → `AsyncAdaptedQueuePool`(`pool_size=5`,
+  `max_overflow=5`, `pool_pre_ping=True`, `pool_recycle=300`)로 전환 — 커넥션을 재사용해
+  요청마다 붙던 TCP/TLS 핸드셰이크를 없앴다. PgBouncer 호환 `connect_args`(익명 prepared
+  statement)는 그대로 두고, PgBouncer가 끊는 유휴 커넥션은 `pool_pre_ping`이 체크아웃 때
+  걸러낸다. 세 백엔드 모두 동일.
 - **교훈**: "느리다"는 증상 하나에 원인이 여러 개 겹쳐 있을 수 있다. 하나 고치고 끝내지
-  말고 나머지 후보도 목록으로 남겨둔다.
+  말고 나머지 후보도 목록으로 남겨뒀다가 실제로 다 처리한다.
 
 ### 11.4 로컬 로그인과 배포 로그인이 서로를 깨뜨림
 - **증상**: Render 배포용으로 Supabase Redirect URL을 등록했더니, 로컬(`localhost:3000`)

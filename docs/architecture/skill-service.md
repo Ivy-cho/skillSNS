@@ -26,7 +26,7 @@ skill-service/
     │   │                    #           SECRET_ENCRYPTION_KEY, CORS_ORIGINS, CHECKPOINTER_URL(파생)
     │   ├── security.py      # decode_token (검증만 — 발급은 user-service 담당)
     │   └── crypto.py        # Fernet encrypt_secret / decrypt_secret (복호화 실패 시 None)
-    ├── db/database.py       # async engine(NullPool) + get_db + Base
+    ├── db/database.py       # async engine(작은 커넥션 풀 + PgBouncer 호환) + get_db + Base
     ├── models/             # SQLAlchemy 모델: skill.py(Skill/ChatSession/SkillDraft), category.py,
     │                        #                  scrap.py(ScrapFolder/Scrap), user_secret.py
     ├── schemas/            # Pydantic I/O 모델 (skill / scrap / creation / user_secret)

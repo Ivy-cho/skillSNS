@@ -61,9 +61,13 @@ skillSNS는 백엔드 3개 + 프론트엔드 1개, 총 **4개의 독립 배포 �
 5. **마이그레이션 도구 없음** — Alembic 등을 쓰지 않는다. 각 서비스가 기동 시
    `Base.metadata.create_all`로 없는 테이블만 만들고, 신규 컬럼은 `main.py` lifespan에서
    `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`로 직접 얹는다.
-6. **DB 커넥션은 `NullPool` + PgBouncer 호환 설정** — Supabase의 pooler를 앞에 두기
-   때문에, SQLAlchemy 쪽 풀링을 끄고(`poolclass=NullPool`) prepared statement 캐시를
-   비활성화한다(`statement_cache_size=0`, 익명 statement 이름). 세 백엔드가 동일하다.
+6. **DB 커넥션은 작은 풀 + PgBouncer 호환 설정** — Supabase의 pooler(PgBouncer, 트랜잭션
+   모드)를 앞에 두기 때문에 prepared statement 캐시를 비활성화한다(`statement_cache_size=0`,
+   익명 statement 이름). 풀은 `AsyncAdaptedQueuePool`(`pool_size=5`, `max_overflow=5`,
+   `pool_pre_ping=True`, `pool_recycle=300`) — 요청마다 붙던 TCP/TLS 핸드셰이크를 없애되,
+   PgBouncer가 끊는 유휴 커넥션은 `pool_pre_ping`이 걸러낸다. 세 백엔드가 동일하다.
+   (skill-service의 대화·생성이 쓰는 LangGraph 체크포인터는 이 엔진과 별개로 psycopg 풀을
+   따로 둔다.)
 
 ### 공통 스택
 

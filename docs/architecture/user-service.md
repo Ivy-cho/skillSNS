@@ -20,7 +20,7 @@ user-service/
     │   ├── config.py           # Settings (pydantic-settings): Supabase 키, DATABASE_URL, JWT_*, CALLBACK_URL, CORS_ORIGINS
     │   └── security.py         # create_access_token / create_refresh_token / decode_token (python-jose, HS256)
     ├── db/
-    │   └── database.py         # async engine(NullPool) + async_sessionmaker + get_db 의존성 + Base
+    │   └── database.py         # async engine(작은 커넥션 풀 + PgBouncer 호환) + async_sessionmaker + get_db + Base
     ├── models/
     │   └── user.py             # User, RefreshToken (SQLAlchemy 2.0 Mapped 스타일)
     ├── schemas/

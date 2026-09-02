@@ -139,6 +139,8 @@
 [skill-service](docs/architecture/skill-service.md) ·
 [feed-service](docs/architecture/feed-service.md) ·
 [frontend](docs/architecture/frontend.md).
+프로젝트 전체를 **에이전트 오케스트레이터** 구조로 읽은 문서는
+[`docs/architecture/agent-orchestration.md`](docs/architecture/agent-orchestration.md).
 
 ---
 

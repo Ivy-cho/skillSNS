@@ -10,6 +10,11 @@ skillSNS는 백엔드 3개 + 프론트엔드 1개, 총 **4개의 독립 배포 �
 | [feed-service.md](feed-service.md) | feed-service (:8003) | 공개 스킬 피드 조회 전용(읽기 전용 조인) |
 | [frontend.md](frontend.md) | frontend (:3000) | Next.js 16 App Router, 모바일 우선 웹앱 |
 
+가로지르는 관점:
+- [agent-orchestration.md](agent-orchestration.md) — 프로젝트 전체를 **에이전트 오케스트레이터**
+  구조로 읽은 문서 (라우트=디스패처, 생성 슈퍼그래프, test_node 서브오케스트레이션,
+  카테고리명 서브에이전트, 프롬프트 오케스트레이션)
+
 관련 문서:
 - API 요청/응답 계약: [`../specs/skill-service.md`](../specs/skill-service.md), [`../specs/user-service-login.md`](../specs/user-service-login.md)
 - 스택 선택 이유 + **배포 & CI/CD**: [`../tech-decisions.md`](../tech-decisions.md)

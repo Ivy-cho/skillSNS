@@ -79,8 +79,8 @@ LIMIT :limit OFFSET :offset
 - **페이징**: `offset`/`limit`. 응답 배열 길이 < `limit`이면 마지막 페이지. 프론트는
   300ms 디바운스 + 무한 스크롤.
 - "요즘 뜨는 스킬" 트렌딩은 여전히 프론트가 이 응답을 가공해 만든다(전용 엔드포인트 없음).
-- 아직 없는 것: `GET /categories`(카테고리 트리 목록) — skill-service 쪽 숙제
-  (`frontend/BACKEND_HANDOFF.md`).
+- 카테고리 칩 목록은 skill-service `GET /categories`(별도 서비스)에서 받는다 — feed-service는
+  `?category=` 필터만 담당한다.
 
 ---
 

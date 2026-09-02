@@ -12,6 +12,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
+from app.api.routes.categories import router as categories_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.scrap import router as scrap_router
 from app.api.routes.skill_creation import router as skill_creation_router
@@ -92,6 +93,7 @@ app.include_router(chat_router)
 app.include_router(skill_creation_router)
 app.include_router(scrap_router)
 app.include_router(user_secrets_router)
+app.include_router(categories_router)
 
 
 @app.get("/health")

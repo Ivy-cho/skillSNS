@@ -565,6 +565,7 @@ GET    /skills/{id}                   # 스킬 상세
 PATCH  /skills/{id}                   # 스킬 수정 (본인만)
 DELETE /skills/{id}                   # 스킬 삭제 (본인만)
 GET    /skills/{id}/download          # MD 파일 다운로드
+GET    /categories                   # 카테고리 트리 목록 [{id,name,emoji,parent_id,skill_count}] (공개)
 POST   /chat/{skill_id}               # 새 대화 시작 (message 생략 시 스킬이 먼저 인사·질문하는 오프닝 턴)
 POST   /chat/{skill_id}/{session_id}  # 대화 이어가기
 GET    /chat/{skill_id}/{session_id}  # 대화 기록 조회

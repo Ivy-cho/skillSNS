@@ -1,7 +1,8 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.category import DEFAULT_CATEGORY_EMOJI, Category
+from app.models.skill import Skill
 
 # 자동 분류가 실패했을 때도 스킬을 반드시 저장하기 위한 대체 카테고리 이름.
 FALLBACK_CATEGORY_NAME = "미분류"
@@ -47,6 +48,39 @@ async def get_taxonomy_tree(db: AsyncSession) -> str:
         for s in sorted(subs_by_major.get(m.id, []), key=lambda x: x.name):
             lines.append(f"  - {s.name}")
     return "\n".join(lines)
+
+
+async def list_taxonomy(db: AsyncSession) -> list[dict]:
+    """카테고리 트리 전체를 [{id, name, emoji, parent_id, skill_count}] 평면 목록으로.
+    skill_count는 소분류=직접 달린 스킬 수, 대분류=소속 소분류들의 합.
+    정렬은 (대분류 이름, 그 아래 소분류 이름) 순 — 대분류 바로 뒤에 자기 소분류가 온다."""
+    cats = (await db.execute(select(Category))).scalars().all()
+    rows = (
+        await db.execute(select(Skill.category, func.count()).group_by(Skill.category))
+    ).all()
+    direct: dict[str, int] = {cid: n for cid, n in rows}
+
+    subs_by_major: dict[str, list[Category]] = {}
+    for c in cats:
+        if c.parent_id is not None:
+            subs_by_major.setdefault(c.parent_id, []).append(c)
+
+    def node(c: Category, count: int) -> dict:
+        return {
+            "id": c.id,
+            "name": c.name,
+            "emoji": c.emoji,
+            "parent_id": c.parent_id,
+            "skill_count": count,
+        }
+
+    out: list[dict] = []
+    majors = sorted((c for c in cats if c.parent_id is None), key=lambda x: x.name)
+    for m in majors:
+        subs = sorted(subs_by_major.get(m.id, []), key=lambda x: x.name)
+        out.append(node(m, sum(direct.get(s.id, 0) for s in subs)))
+        out.extend(node(s, direct.get(s.id, 0)) for s in subs)
+    return out
 
 
 async def upsert_category(

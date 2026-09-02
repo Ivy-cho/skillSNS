@@ -90,16 +90,17 @@ stage로 되돌림 → 그 stage의 **시작 상태**(안내/질문 메시지 �
   `recent`(기본, `s.created_at DESC`) / `views`(`s.view_count DESC`, 동점 `s.title ASC`) /
   `scraps`(`scrap_count DESC`, 동점 `s.title ASC`). 화이트리스트 밖 값은 `400 INVALID_SORT`.
   파라미터 없으면 기존과 동일(최신순). → 프론트의 "다 받아 재정렬"을 무한스크롤로 되돌릴 수 있음.
-- **카테고리 목록 API `GET /categories`** — 🔴 아직. 피드 카드에서 카테고리 이름을 긁는
-  방식이라 첫 페이지에 안 뜬 카테고리는 안 보입니다. skill-service에 `GET /categories`로
-  `[{id, name, emoji, parent_id, skill_count}]` 트리를 주세요
-  (`skill-service/app/services/categories.py`에 트리 코드가 이미 있습니다). ← **남은 숙제**
+- ✅ **카테고리 목록 API `GET /categories`** (구현됨) — skill-service `GET /categories`
+  (인증 불필요)가 `[{id, name, emoji, parent_id, skill_count}]` 평면 목록을 준다.
+  `parent_id`가 `null`이면 대분류. 정렬은 (대분류 이름 → 그 아래 소분류 이름) 순이라
+  대분류 바로 뒤에 자기 소분류가 온다. `skill_count`: 소분류=직접 스킬 수,
+  대분류=소속 소분류들의 합.
   - ✅ **대분류가 피드에 안 옴** (구현됨) — `FeedItem.major_category: Optional[str]`로 소분류의
     부모(대분류) 이름을 함께 내려줍니다. 백필 안 된 라벨 스킬이면 `null`.
   - ✅ **정확 필터** (구현됨) — `GET /feed?category=<소분류 id | 소분류 이름 | 대분류 이름>`.
     ILIKE 부분일치가 아니라 정확일치(`s.category = :cat OR c.name = :cat OR cm.name = :cat`)라
     제목·소개에 그 단어가 든 다른 카테고리 스킬이 안 딸려옵니다. `?q=`와 병행 가능.
-    → `GET /categories`만 오면 "카테고리별 묶어 보기"를 칩 필터로 전환 가능.
+  → 3가지 모두 준비됐으니 "카테고리별 묶어 보기"를 칩 필터로 전환 가능.
 - ✅ **오프닝 턴 자리표시자 `(대화 시작)`를 이력에서 제외** (구현됨) — `chat_sessions`에
   `started_with_opening` 컬럼을 추가하고, 오프닝 턴으로 시작된 세션이면 `GET /chat/{skill}/latest`
   와 `GET /chat/{skill}/{session_id}` 응답에서 **맨 앞 사용자 메시지(자리표시자)를 서버가 뺀다.**

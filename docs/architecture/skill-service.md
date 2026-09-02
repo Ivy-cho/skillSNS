@@ -31,7 +31,7 @@ skill-service/
     │                        #                  scrap.py(ScrapFolder/Scrap), user_secret.py
     ├── schemas/            # Pydantic I/O 모델 (skill / scrap / creation / user_secret)
     ├── services/
-    │   ├── categories.py    # 택소노미 조회·표시 해석·upsert·"미분류" 폴백
+    │   ├── categories.py    # 택소노미 조회·표시 해석·upsert·"미분류" 폴백·list_taxonomy(목록 API용)
     │   ├── user_secrets.py  # resolve_llm_key / require_llm_key (BYOK + 무료 체험 카운트)
     │   └── ingest.py        # URL/파일(PDF·DOCX·TXT·MD) → 텍스트 추출 (스킬 생성 입력 보강)
     ├── agent/
@@ -53,7 +53,8 @@ skill-service/
         ├── chat.py            # /chat    대화 시작/이어가기/이력/최근/세션목록
         ├── skill_creation.py  # /skills/create/*  생성 파이프라인 오케스트레이션
         ├── scrap.py           # /scrap   폴더 + 담기/빼기
-        └── user_secrets.py    # /me/anthropic-key  BYOK 키 등록/조회/삭제
+        ├── user_secrets.py    # /me/anthropic-key  BYOK 키 등록/조회/삭제
+        └── categories.py      # GET /categories  카테고리 택소노미 목록(공개, 칩 필터용)
 ```
 
 ### 인증
@@ -362,6 +363,12 @@ get_taxonomy_tree(db)  →  현재 대/소분류 트리를 텍스트로
 
 표시용 해석은 `services/categories.py`의 `get_display_map` / `resolve_display`가
 담당한다(id → `(이름, 이모지)`, 못 찾으면 원본값 + 기본 이모지로 폴백 — 백필 전 라벨 대비).
+
+**`GET /categories`** (공개, `api/routes/categories.py`): `list_taxonomy(db)`가 택소노미
+전체를 `[{id, name, emoji, parent_id, skill_count}]` 평면 목록으로 준다. `parent_id`가
+`null`이면 대분류. `skill_count`는 소분류=직접 달린 스킬 수, 대분류=소속 소분류들의 합.
+정렬은 (대분류 이름 → 그 아래 소분류 이름) 순. 프론트가 `parent_id`로 트리를 복원해
+피드의 카테고리 칩 필터를 만든다(`GET /feed?category=`와 짝).
 
 ---
 

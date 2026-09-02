@@ -599,6 +599,24 @@ message/links/files가 전부 비어있으면 422. 응답 형식은 6-10과 동�
 | 403 | FORBIDDEN | 본인 draft가 아님 |
 | 404 | DRAFT_NOT_FOUND | 존재하지 않는 draft |
 
+### 6-14. 카테고리 목록
+
+| 항목 | 내용 |
+|---|---|
+| Method | `GET` |
+| URL | `/categories` |
+| 설명 | 카테고리 택소노미 전체(대분류 + 소분류)를 평면 목록으로. `parent_id`가 `null`이면 대분류. 정렬은 (대분류 이름 → 그 아래 소분류 이름) 순. |
+| 인증 | 불필요 (공개) |
+
+**응답 (200 OK)**
+```json
+[
+  { "id": "uuid", "name": "재테크", "emoji": "💰", "parent_id": null, "skill_count": 7 },
+  { "id": "uuid", "name": "주식",   "emoji": "📈", "parent_id": "<재테크 id>", "skill_count": 4 }
+]
+```
+`skill_count`: 소분류는 그 소분류에 직접 달린 스킬 수, 대분류는 소속 소분류들의 합.
+
 ---
 
 ## 7. DB 설계

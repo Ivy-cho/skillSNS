@@ -620,9 +620,11 @@ message/links/files가 전부 비어있으면 422. 응답 형식은 6-10과 동�
 |---|---|---|
 | id | UUID | PK, 자동 생성 |
 | user_id | UUID | 대화를 시작한 사용자 |
-| skill_id | UUID | FK → skills.id |
+| skill_id | UUID | FK → skills.id (ON DELETE CASCADE) |
 | thread_id | VARCHAR | LangGraph Checkpointer thread ID |
+| started_with_opening | BOOLEAN | 오프닝 턴으로 시작된 세션인지 (기본 false). 이력 응답에서 맨 앞 더미 사용자 발화 제외 / 채팅 목록에서 이 턴만 있는 세션 감추기에 사용 |
 | created_at | TIMESTAMP | 세션 생성일 |
+| updated_at | TIMESTAMP | 메시지가 오갈 때마다 갱신 — 채팅 목록 정렬 기준 |
 
 > 대화 메시지는 LangGraph PostgreSQL Checkpointer가 별도 테이블로 자동 관리한다.
 

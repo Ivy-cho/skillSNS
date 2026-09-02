@@ -47,6 +47,22 @@ async def _invoke_agent(agent, config: dict, human_content: str) -> str:
         return CHAT_ERROR_REPLY
 
 
+def _history_items(state, *, drop_opening: bool) -> list[MessageItem]:
+    """체크포인터 state의 메시지를 화면용 MessageItem 목록으로 변환한다.
+    drop_opening이면 맨 앞의 더미 사용자 발화(오프닝 자리표시자, 예: "(대화 시작)")를 뺀다 —
+    구체 문구가 아니라 '이 세션이 오프닝 턴으로 시작됐다'는 사실(started_with_opening)에만 의존한다."""
+    raw = list(state.values.get("messages", [])) if state else []
+    if drop_opening and raw and isinstance(raw[0], HumanMessage):
+        raw = raw[1:]
+    items: list[MessageItem] = []
+    for msg in raw:
+        if isinstance(msg, HumanMessage):
+            items.append(MessageItem(role="user", content=msg.content))
+        elif isinstance(msg, AIMessage):
+            items.append(MessageItem(role="assistant", content=msg.content))
+    return items
+
+
 def _get_user_id(credentials: Optional[HTTPAuthorizationCredentials]) -> Optional[str]:
     if not credentials:
         return None
@@ -88,7 +104,9 @@ async def start_chat(
             return ChatResponse(session_id=None, reply=NO_API_KEY_REPLY)
 
     thread_id = str(uuid.uuid4())
-    session = ChatSession(user_id=user_id, skill_id=skill_id, thread_id=thread_id)
+    session = ChatSession(
+        user_id=user_id, skill_id=skill_id, thread_id=thread_id, started_with_opening=is_opening
+    )
     db.add(session)
     await db.commit()
     await db.refresh(session)
@@ -176,9 +194,14 @@ async def list_chat_sessions(
         agent = build_agent("", request.app.state.checkpointer)
         config = {"configurable": {"thread_id": session.thread_id}}
         state = await agent.aget_state(config)
-        last_message = ""
-        if state and state.values.get("messages"):
-            last_message = state.values["messages"][-1].content
+        msgs = state.values.get("messages", []) if state else []
+
+        # 오프닝 턴만 있고(자리표시자 1 + 스킬 인사 1 = 2개 이하) 사용자가 아직 말을 건
+        # 적 없는 세션은 "잠깐 눌러본 대화"라 목록에서 감춘다.
+        if session.started_with_opening and len(msgs) <= 2:
+            continue
+
+        last_message = msgs[-1].content if msgs else ""
 
         cat_name, cat_emoji = disp.get(category, (category, DEFAULT_CATEGORY_EMOJI))
         summaries.append(
@@ -223,14 +246,7 @@ async def get_latest_chat_session(
     config = {"configurable": {"thread_id": session.thread_id}}
     state = await agent.aget_state(config)
 
-    messages = []
-    if state and state.values.get("messages"):
-        for msg in state.values["messages"]:
-            if isinstance(msg, HumanMessage):
-                messages.append(MessageItem(role="user", content=msg.content))
-            elif isinstance(msg, AIMessage):
-                messages.append(MessageItem(role="assistant", content=msg.content))
-
+    messages = _history_items(state, drop_opening=session.started_with_opening)
     return ChatHistoryResponse(session_id=session.id, skill_id=skill_id, messages=messages)
 
 
@@ -261,12 +277,5 @@ async def get_chat_history(
     config = {"configurable": {"thread_id": session.thread_id}}
     state = await agent.aget_state(config)
 
-    messages = []
-    if state and state.values.get("messages"):
-        for msg in state.values["messages"]:
-            if isinstance(msg, HumanMessage):
-                messages.append(MessageItem(role="user", content=msg.content))
-            elif isinstance(msg, AIMessage):
-                messages.append(MessageItem(role="assistant", content=msg.content))
-
+    messages = _history_items(state, drop_opening=session.started_with_opening)
     return ChatHistoryResponse(session_id=session_id, skill_id=skill_id, messages=messages)

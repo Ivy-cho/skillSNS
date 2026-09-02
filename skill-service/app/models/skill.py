@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,6 +44,13 @@ class ChatSession(Base):
         String, ForeignKey("skills.id", ondelete="CASCADE"), nullable=False
     )
     thread_id: Mapped[str] = mapped_column(String, nullable=False)
+    # 오프닝 턴(사용자가 아무 말도 안 했는데 스킬이 먼저 인사하는 첫 턴)으로 시작된 세션인지.
+    # 그런 세션의 히스토리 첫 메시지는 형식 맞추기용 더미 사용자 발화("(대화 시작)")라, 이력을
+    # 내려줄 때 이 플래그가 켜져 있으면 맨 앞 사용자 메시지를 빼고 준다(문구 매칭에 의존하지 않음).
+    # 채팅 목록(GET /chat/sessions)에서도 이 턴만 있는 세션(메시지 2개 이하)은 감춘다.
+    started_with_opening: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

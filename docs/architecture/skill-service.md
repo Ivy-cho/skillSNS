@@ -122,6 +122,7 @@ POST /chat/{skill_id}/{session_id}  { message }
 | `user_id` | String | 세션 소유자 |
 | `skill_id` | String | `FOREIGN KEY → skills.id (ON DELETE CASCADE)` |
 | `thread_id` | String | NOT NULL. **LangGraph 체크포인터의 대화 스레드 키** (여기가 핵심 — 3절) |
+| `started_with_opening` | Boolean | NOT NULL, 기본 `false`. 오프닝 턴으로 시작된 세션인지. 이력 응답에서 맨 앞 더미 사용자 발화를 뺄지, 채팅 목록에서 이 턴만 있는 세션을 감출지 판단에 쓴다 |
 | `created_at` | DateTime(tz) | |
 | `updated_at` | DateTime(tz) | 메시지가 오갈 때마다 라우트에서 갱신. 채팅 목록을 "최근 대화순"으로 정렬하는 기준 |
 
@@ -249,19 +250,22 @@ Supabase 유휴 타임아웃에 끊기면 **재연결 없이 계속 에러**를 
 
 | 엔드포인트 | 용도 | 방식 |
 |---|---|---|
-| `GET /chat/{skill_id}/{session_id}` | 특정 대화 이력 전체 | `agent.aget_state(config)` → `state.values["messages"]`를 role별로 변환 |
-| `GET /chat/{skill_id}/latest` | 채팅창 진입 시 "가장 최근 대화 이어보기" | `chat_sessions`에서 `updated_at DESC LIMIT 1` → 위와 동일. 없으면 `null` |
-| `GET /chat/sessions` | 채팅 목록 화면 ("내가 대화한 스킬들") | `chat_sessions ⨝ skills`를 `updated_at DESC`로, 각 스레드의 마지막 메시지 1개만 `aget_state`로 미리보기 |
+| `GET /chat/{skill_id}/{session_id}` | 특정 대화 이력 전체 | `agent.aget_state(config)` → `_history_items()`가 role별로 변환. `started_with_opening`이면 맨 앞 더미 사용자 발화를 뺀다 |
+| `GET /chat/{skill_id}/latest` | 채팅창 진입 시 "가장 최근 대화 이어보기" | `chat_sessions`에서 `updated_at DESC LIMIT 1` → 위와 동일. 세션이 없으면 `null` |
+| `GET /chat/sessions` | 채팅 목록 화면 ("내가 대화한 스킬들") | `chat_sessions ⨝ skills`를 `updated_at DESC`로, 각 스레드의 마지막 메시지 1개만 `aget_state`로 미리보기. `started_with_opening`이면서 메시지 ≤2인 세션(오프닝만 있고 사용자가 말 건 적 없음)은 제외 |
 
 읽기 전용 호출은 `build_agent("", checkpointer)`처럼 `md_content`·`api_key` 없이 만든다
-(LLM을 안 부르고 상태만 조회).
+(LLM을 안 부르고 상태만 조회). `_history_items(state, drop_opening=...)`가 세 경로의 메시지
+변환을 공유한다 — `drop_opening`은 구체 문구가 아니라 `started_with_opening` 플래그에만 의존한다.
 
 ### 3.5 오프닝 턴
 
 `POST /chat/{skill_id}`에서 `message`가 비어 있으면(채팅창을 막 연 시점) **오프닝 턴**:
 `build_agent(..., opening=True)`가 시스템 프롬프트에 "지금은 첫 턴이다, 스스로 소개하고
 첫 질문을 던져라"는 지침(`OPENING_INSTRUCTIONS`)을 덧붙인다. LLM은 사람 발화가 있어야
-답하는 구조라 `"(대화 시작)"` 더미 메시지를 넣는다(프론트가 이력에서 걷어냄).
+답하는 구조라 `"(대화 시작)"` 더미 메시지를 넣는다. 그 세션은 `started_with_opening=True`로
+저장되고, 이후 이력 응답에서 **서버가 맨 앞 더미 발화를 빼서** 내려준다(프론트가 문구로
+거를 필요 없음). 사용자가 실제로 첫 메시지를 보내기 전까지는 이 세션이 채팅 목록에도 안 뜬다.
 오프닝 턴은 **서버 기본 키로 처리**되어 무료 횟수·본인 키를 소모하지 않는다 —
 실제 소모는 사용자가 첫 메시지를 보내는 순간부터.
 

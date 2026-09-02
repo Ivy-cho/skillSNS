@@ -32,50 +32,37 @@
 
 ---
 
-## 🟢 스킬 만들기 파이프라인 — 남은 것
+## ✅ 스킬 만들기 파이프라인 — 남은 것 (전부 해결)
 
-### (1) 이전 단계로 되돌리기 (revert)
-**프론트 상태**: "이 단계부터 수정" 버튼·핸들러·클라이언트 함수(`revertToStage`) 완성,
-현재 비활성.
-**붙이는 법**: `SkillCreator.tsx`의 `EDIT_BACK_ENABLED`를 `true`로.
+### (1) 이전 단계로 되돌리기 (revert) — ✅ 구현됨
+`POST /skills/create/{draft_id}/revert` (multipart, `stage=<what_skill|skill_content|skill_name|skill_test>`)
+→ 지정 stage 이후로 누적된 `skill_info`(및 `skill_name` 이하면 `category`도)를 폐기하고,
+**새 `thread_id`로** 그 stage를 처음부터 다시 시작한 `CreationResponse`를 준다.
+이미 `confirm`된 draft면 `409 DRAFT_ALREADY_CONFIRMED`, `stage` 값이 잘못되면 `422 INVALID_STAGE`.
+→ 프론트: `SkillCreator.tsx`의 `EDIT_BACK_ENABLED`를 `true`로, `revertToStage`의
+`[백엔드 미구현]` 주석 제거.
 
-```
-POST /skills/create/{draft_id}/revert
-Content-Type: multipart/form-data
-  stage=<what_skill | skill_content | skill_name | skill_test>
-→ 200 CreationResponse (기존과 동일한 모양)
-```
-**기대 동작**: 지정 stage 이후로 누적된 `skill_info`·대화를 폐기 → draft stage를 지정
-stage로 되돌림 → 그 stage의 **시작 상태**(안내/질문 메시지 포함)를 응답.
-이미 `confirm`(게시)된 draft는 revert 불가 → 409 등 에러 권장(`detail`을 프론트가 그대로 노출).
+### (2) 카테고리를 대화에서 확정 — ✅ 해결됨 (카테고리명 Agent로 대체)
+`POST /skills/create`는 이제 category를 **받지 않는다**(빈 draft로 시작). 이름(`skill_name`)이
+확정되는 순간 카테고리명 Agent가 스킬 내용을 보고 대/소분류를 자동으로 정해
+`skill_info.category`(소분류 id)에 채운다. 실패해도 `confirm` 때 재시도하고, 그래도 안 되면
+"미분류"로 저장된다. → 프론트의 `DEFAULT_CATEGORY = "여러 분야"` 우회는 불필요.
 
-### (2) 카테고리를 대화에서 확정
-프론트에서 **카테고리 선택 단계를 없앴습니다.** 앱 로드 시 자동으로 draft를 시작하고,
-분야는 첫 단계(주제 정하기) 대화에서 정해집니다.
-- **현재 임시 처리**: `create`가 category를 필수(`Form(...)`)로 요구해서 중립 기본값
-  `"여러 분야"`(`SkillCreator.tsx`의 `DEFAULT_CATEGORY`)로 시작합니다. 첫 질문이 열린
-  형태로 나와 대화는 자연스러운데, **`skill_info.category`엔 "여러 분야"가 그대로 저장**됩니다.
-- **요청**: (1) create에서 category를 옵션으로 받거나 빈 값 허용, (2) what_skill 대화에서
-  실제 분야를 파악해 `skill_info.category`를 확정·저장. 그래야 게시된 스킬에 실제
-  카테고리가 담깁니다.
+### (3) 테스트 리포트 완전성 — ✅ 구현됨
+`test_node`가 채점 tool-call 결과를 검사해서, `sampleQuestions`/`diagnosis`/
+`benchmark(passRate·time·aiCost)`/`analystNotes` 중 빠진 게 있으면 **채점 LLM에 한 번 다시
+요청**한다. 그래도 불완전하면 `_ensure_complete_report()`가 실측치(평균 응답 시간·총 토큰)와
+중립값으로 빈 필드를 메우고 `SkillTestOutput`으로 최종 검증한다 — `skill_info.testReport`는
+**항상 `test_report.schema.json` 형태를 완전히 갖춘 채** 내려온다.
+→ 프론트의 방어 코드는 유지해도 되고 걷어내도 됨(더는 필드가 통째로 빠지지 않음).
 
-### (3) 테스트 리포트가 불완전하게 오는 경우
-채점(`test_node`의 `grade_llm` → `SkillTestOutput`)이 **가끔 리포트를 불완전하게 생성**합니다.
-실제 관측: 채점은 200 OK인데 `benchmark.passRate`가 통째로 빠져서, 프론트가 그 필드를 읽다
-런타임 크래시(앱 화이트아웃)했습니다.
-- **프론트 대응(완료)**: `TestReport`를 방어적으로 수정 — 없는 섹션/필드는 건너뛰고 앱이
-  죽지 않습니다. 단 값이 없으면 그 부분은 화면에 안 나옵니다.
-- **요청**: `test_report.schema.json`은 `benchmark.passRate/time/aiCost`를 required로
-  정의하지만 LLM tool-call이 항상 채우진 않습니다. 스키마 검증 후 재요청 또는 프롬프트
-  강화로 **완전한 리포트를 보장**해 주세요.
-
-### (4) 테스트/개선 단계의 자유 메시지 — 확인 요청
-입력창을 주제·내용 단계뿐 아니라 **테스트·개선 단계에도** 띄웁니다
-(`SkillCreator.tsx`의 `CHAT_INPUT_PHASES`). 그 단계에서 입력한 자유 메시지는 기존
-`continueDraft`와 동일하게 `POST /skills/create/{draft_id}`로 전송됩니다.
-- skill-service가 `skill_test` / `skill_improve` stage에서 들어온 자유 메시지를 받아
-  처리(예: "이 부분을 이렇게 고쳐줘")해 주는지 확인이 필요합니다.
-- 처리 방식(무시 / 에러 / 개선 반영)을 정해주세요.
+### (4) 테스트/개선 단계의 자유 메시지 — ✅ 확인 완료 (처리됨)
+`skill_test` / `skill_improve` stage에서 `POST /skills/create/{draft_id}`로 들어온 자유
+메시지는 **무시되지 않는다.**
+- `skill_test`: 테스트를 돌리기 전 단계라, 자유 메시지는 샘플 질문을 다듬는 대화로 처리된다
+  (질문 확정 tool을 부르기 전까지 계속 대화).
+- `skill_improve`: 자유 메시지가 개선 지시로 반영된다 — 05 프롬프트가 받아서 해당 영역을
+  보완하고 `SkillImproveOutput` tool로 `content.*`를 덮어쓴다.
 
 ---
 

@@ -1,24 +1,106 @@
+import logging
 import time
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langgraph.checkpoint.memory import MemorySaver
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from app.agent.graph import build_agent
 from app.core.config import settings
 
 from .loader import load_prompt
 from .merges import merge_test_report
-from .outputs import SkillTestOutput
+from .outputs import DiagnosisItem, SampleQuestion, SkillTestOutput
 from .render import render_md_content
 from .state import CreatorState
 from .text import extract_text
+
+logger = logging.getLogger(__name__)
 
 BASELINE_PROMPT = (
     "당신은 일반적인 도움을 주는 어시스턴트입니다. "
     "특정 분야의 전문 지식이나 노하우 없이, 일반 상식 수준에서만 답하세요."
 )
+
+# 채점 LLM에게 "다시, 이번엔 빠짐없이" 요구할 때 붙이는 지침.
+REGRADE_INSTRUCTION = (
+    "직전 SkillTestOutput 호출에 빠진 항목이 있습니다. sampleQuestions, diagnosis, "
+    "benchmark(passRate·time·aiCost 세 개 모두), analystNotes를 전부 채워서 "
+    "SkillTestOutput을 한 번만 다시 호출하세요."
+)
+
+
+def _cost_level(total_tokens: int) -> str:
+    if total_tokens < 4_000:
+        return "적음"
+    if total_tokens < 12_000:
+        return "보통"
+    return "많음"
+
+
+def _report_is_complete(args: dict) -> bool:
+    """LLM이 준 tool_call 인자가 화면이 기대하는 형태를 다 갖췄는지(빠른 검사)."""
+    if not isinstance(args, dict):
+        return False
+    bench = args.get("benchmark") or {}
+    return (
+        bool(args.get("sampleQuestions"))
+        and bool(args.get("diagnosis"))
+        and bool(args.get("analystNotes"))
+        and all(k in bench for k in ("passRate", "time", "aiCost"))
+    )
+
+
+def _ensure_complete_report(args: dict, avg_seconds: float, total_tokens: int) -> dict:
+    """test_report를 항상 test_report.schema.json / SkillTestOutput 형태로 보장한다.
+    LLM이 일부 필드를 빠뜨려도(관측된 실패: benchmark.passRate 누락 → 프론트 크래시)
+    실측치·중립값으로 메운 뒤 Pydantic으로 최종 검증한 dict를 돌려준다."""
+    data = dict(args or {})
+
+    bench = dict(data.get("benchmark") or {})
+    bench.setdefault(
+        "passRate",
+        {
+            "withSkill": 0.0,
+            "withoutSkill": 0.0,
+            "help": "이번 테스트에서는 통과율을 산출하지 못했습니다.",
+        },
+    )
+    bench.setdefault(
+        "time",
+        {"seconds": avg_seconds, "help": "스킬을 켰을 때의 평균 응답 시간(실측)."},
+    )
+    bench.setdefault(
+        "aiCost",
+        {
+            "level": _cost_level(total_tokens),
+            "help": f"이번 테스트에 쓴 총 토큰 약 {total_tokens} 기준(실측).",
+        },
+    )
+    data["benchmark"] = bench
+    data.setdefault("sampleQuestions", [])
+    data.setdefault("diagnosis", [])
+    data.setdefault("analystNotes", [])
+
+    try:
+        return SkillTestOutput.model_validate(data).model_dump()
+    except ValidationError:
+        logger.warning("test_report 검증 실패 — 유효하지 않은 항목을 정리해 재구성", exc_info=True)
+
+    def _keep_valid(model, items):
+        out = []
+        for item in items or []:
+            try:
+                out.append(model.model_validate(item).model_dump())
+            except ValidationError:
+                pass
+        return out
+
+    data["sampleQuestions"] = _keep_valid(SampleQuestion, data.get("sampleQuestions"))
+    data["diagnosis"] = _keep_valid(DiagnosisItem, data.get("diagnosis"))
+    data["analystNotes"] = [str(n) for n in (data.get("analystNotes") or []) if n]
+    return SkillTestOutput.model_validate(data).model_dump()
 
 
 class ProposedQuestions(BaseModel):
@@ -94,8 +176,20 @@ def make_skill_test_node(api_key: str):
         # 이 노드가 반환하는 messages가 이후 다른 노드의 히스토리에 재사용될 때 Anthropic이 거부한다.
         propose_result = ToolMessage(content="ok", tool_call_id=tool_calls[0]["id"])
 
-        grade_response = await grade_llm.ainvoke([system, HumanMessage(content="\n".join(transcript_lines))])
+        transcript = "\n".join(transcript_lines)
+        grade_response = await grade_llm.ainvoke([system, HumanMessage(content=transcript)])
         grade_calls = getattr(grade_response, "tool_calls", None)
+
+        # 리포트가 불완전하게 오면(관측된 실패: benchmark.passRate 누락) 한 번만 다시 요청한다.
+        # 실패한 첫 응답은 messages에 남기지 않는다 — tool_use/tool_result 짝이 안 맞아 이후 히스토리
+        # 재사용 시 Anthropic이 거부하기 때문. 재시도도 불완전하면 아래 _ensure_complete_report가 메운다.
+        if grade_calls and not _report_is_complete(grade_calls[0]["args"]):
+            regraded = await grade_llm.ainvoke(
+                [system, HumanMessage(content=transcript), HumanMessage(content=REGRADE_INSTRUCTION)]
+            )
+            if getattr(regraded, "tool_calls", None):
+                grade_response, grade_calls = regraded, regraded.tool_calls
+
         turn_messages = [extract_text(response.content), extract_text(grade_response.content)]
         if not grade_calls:
             return {
@@ -106,7 +200,8 @@ def make_skill_test_node(api_key: str):
             }
 
         grade_result = ToolMessage(content="ok", tool_call_id=grade_calls[0]["id"])
-        updated_info = merge_test_report(skill_info, grade_calls[0]["args"])
+        report = _ensure_complete_report(grade_calls[0]["args"], avg_seconds, total_tokens)
+        updated_info = merge_test_report(skill_info, report)
         return {
             "messages": [response, propose_result, grade_response, grade_result],
             "skill_info": updated_info,

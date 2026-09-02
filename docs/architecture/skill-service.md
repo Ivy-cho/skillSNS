@@ -311,6 +311,10 @@ LangGraph는 매 invoke를 항상 START부터 실행한다.
   ② 응답 시간·토큰 실측 →
   ③ 두 결과 transcript를 다시 LLM에게 넘겨 `test_report` 형식으로 채점.
   2단 오케스트레이션이라 공용 실행기로 못 만든다.
+  **리포트 완전성 보장**: 채점 tool-call이 `benchmark.passRate` 같은 필수 필드를 빠뜨리면
+  (관측된 실패 → 프론트 크래시) 채점 LLM에 한 번 재요청하고, 그래도 불완전하면
+  `_ensure_complete_report()`가 실측치(평균 응답 시간·총 토큰)와 중립값으로 채운 뒤
+  `SkillTestOutput`으로 최종 검증한다 — `testReport`는 항상 완전한 형태로 저장된다.
 
 ### 4.3 프롬프트 ↔ 코드 경계
 

@@ -775,3 +775,21 @@ npm run dev
   미구현(진행 중/다음 목록).
 - **교훈**: "데이터가 안 보인다"고 항상 조회 버그는 아니다 — 먼저 DB를 직접 봐서 데이터가
   애초에 그 자리에 있는지부터 확인한다.
+
+### 11.9 특정 프롬프트를 스킬로 등록하면 "⚠️ Failed to fetch"
+- **증상**: HTML 태그·쉘 명령이 잔뜩 든 프롬프트("포트폴리오 페이지 만들기" 같은)를 "내 스킬
+  넣기"나 대화로 등록하려 하면 브라우저에 `Failed to fetch`만 뜸. 평범한 프롬프트는 정상.
+- **원인**: Render 앞단 **Cloudflare WAF**. 요청 본문에 `<div class="...">`·`<meta ...>`
+  (XSS 패턴)와 `git push -f`·`gh api -X POST`·`| base64 -d`·`python -m http.server`
+  (명령 주입 패턴)가 누적되면 OWASP 이상 점수(anomaly score)가 임계치를 넘어 **403 `Blocked`** 로 끊는다.
+  이 응답은 앱에 도달조차 안 하고(`x-render-origin-server` 헤더 없음) CORS 헤더도 없어서
+  브라우저엔 `Failed to fetch`로만 보인다. 개별 패턴 조각은 안 걸리고 "누적"돼야 걸린다.
+- **진단**: 배포 백엔드에 그 본문을 `curl`로 직접 POST → `Server: cloudflare` +
+  `<title>Blocked</title>` (221KB HTML), `uvicorn` 헤더 없음 = WAF 차단 확정. 같은 본문을
+  base64로 감싸 보내면 통과(401까지 도달).
+- **해결**: Render의 Cloudflare WAF는 우리가 못 만지므로, 프론트가 스킬 본문을 **base64로
+  감싸 전송**하고(`content_encoding="base64"` / `message_encoding="base64"`) 서버가 받아서
+  평문으로 되돌린다. 저장·표시는 그대로 평문. `POST /skills`, `PATCH /skills/{id}`,
+  `POST /skills/create/{draft_id}` 세 경로에 적용.
+- **교훈**: "특정 입력에서만 Failed to fetch"는 앱 로그에 아무것도 안 남으면 앞단(WAF/프록시)을
+  의심한다. `curl`로 엣지 응답을 직접 보면 5분이면 갈린다.

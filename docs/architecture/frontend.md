@@ -129,6 +129,15 @@ frontend/
 한국어 안내로 치환하고(`DETAIL_MESSAGES`), 나머지는 `detail`을 그대로 노출한다.
 skill-service가 대화 오류를 200 + 안내 문구로 흡수하는 방침과 짝을 이룬다.
 
+### 3.2a 스킬 본문 base64 전송 (Cloudflare WAF 우회)
+
+스킬 본문에 HTML 태그·쉘 명령이 잔뜩이면 Render 앞단 Cloudflare WAF가 요청을 403(`Blocked`)으로
+끊고, 그 응답엔 CORS 헤더가 없어 브라우저엔 `Failed to fetch`로만 뜬다(README 11.9). WAF 설정은
+못 바꾸므로, `backendClient.ts`의 `toBase64Utf8()`가 본문을 base64로 감싸 보내고
+(`content_encoding="base64"` / multipart는 `message_encoding="base64"`) skill-service가 받아서
+평문으로 되돌린다. 적용 경로: `createSkillDirect`(`POST /skills`), `updateSkill`(`PATCH /skills/{id}`),
+`continueDraft`(`POST /skills/create/{draft_id}`).
+
 ### 3.3 스크랩 낙관적 캐시 (`scrapStore.ts`)
 
 폴더/스크랩을 모듈 스코프 캐시에 두고 `useSyncExternalStore`로 구독한다. 변경(담기·폴더

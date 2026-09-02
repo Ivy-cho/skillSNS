@@ -150,6 +150,7 @@ async def update_skill(
         raise HTTPException(status_code=403, detail="FORBIDDEN")
 
     update_data = body.model_dump(exclude_unset=True)
+    update_data.pop("content_encoding", None)  # 전송용 플래그일 뿐 — 스킬 컬럼이 아니다
     for field, value in update_data.items():
         setattr(skill, field, value)
 

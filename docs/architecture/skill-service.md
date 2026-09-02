@@ -66,6 +66,18 @@ user-service가 발급한 access JWT를 `decode_token`으로 **검증만** 한�
 **500 응답엔 CORS 헤더가 안 붙어 브라우저에 `failed to fetch`로 보이기 때문**에,
 이 서비스는 전반적으로 "에러를 200 + 안내 문구로 흡수"하는 방침을 쓴다.
 
+### 스킬 본문 base64 디코드 (Cloudflare WAF 우회)
+
+HTML 태그·쉘 명령이 잔뜩인 프롬프트를 등록하면 Render 앞단 Cloudflare WAF가 요청 본문을
+공격으로 보고 403(`Blocked`)으로 끊는다(앱에 도달조차 안 함, README 11.9). 프론트가 본문을
+base64로 감싸 보내면 패턴 매칭을 피하고, 서버가 풀어 평문으로 되돌린다:
+- `POST /skills` / `PATCH /skills/{id}`: `SkillCreate`/`SkillUpdate`에 `content_encoding` 필드.
+  `"base64"`면 `model_validator(mode="after")`인 `_decode_b64_fields`가 `title`/`description`/
+  `md_content`를 디코드(`schemas/skill.py`). 잘못된 base64면 422.
+- `POST /skills/create/{draft_id}`: multipart `message_encoding="base64"`면 `continue_draft`가
+  `message`를 디코드한 뒤 `_combine_sources`에 넘긴다.
+저장·표시는 항상 평문.
+
 ### 요청 처리 흐름 (대화 예시)
 
 ```

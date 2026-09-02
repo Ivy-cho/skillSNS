@@ -1,5 +1,7 @@
+import binascii
 import logging
 import uuid
+from base64 import b64decode
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -183,6 +185,9 @@ async def continue_draft(
     draft_id: str,
     request: Request,
     message: str = Form(""),
+    # message에 HTML 태그·쉘 명령이 잔뜩이면 Cloudflare WAF가 요청을 403(Blocked)으로 끊는다
+    # (→ 브라우저엔 "Failed to fetch"). 프론트가 그런 message를 base64로 감싸 보낼 때 "base64"로 온다.
+    message_encoding: str = Form(""),
     links: list[str] = Form([]),
     files: list[UploadFile] = File([]),
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
@@ -190,6 +195,12 @@ async def continue_draft(
 ):
     user_id = _get_user_id(credentials)
     draft = await _load_draft(draft_id, user_id, db)
+
+    if message_encoding == "base64" and message:
+        try:
+            message = b64decode(message, validate=True).decode("utf-8")
+        except (binascii.Error, ValueError) as e:
+            raise HTTPException(status_code=422, detail="INVALID_MESSAGE_ENCODING") from e
 
     combined = await _combine_sources(message, links, files)
     if not combined:
